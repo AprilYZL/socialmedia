@@ -1,22 +1,26 @@
 {% extends "layout.njk" %}
 {% block title %}Calendar{% endblock %}
 {% block content %}
-<h1>Calendar</h1>
+<h1>Posting calendar</h1>
 
 <section class="card">
-  <h2>Schedule a post</h2>
-  <form method="post" action="/calendar" class="row wrap">
-    <select name="variant_id" required class="grow">
-      <option value="">— pick content × platform —</option>
-      {% for v in variantOptions %}
-      <option value="{{ v.id }}">{{ v.piece_title }} → {{ v.platform_name }} ({{ v.status }})</option>
+  <h2>Mark a post as published</h2>
+  <form method="post" action="/calendar/mark" class="row wrap">
+    <select name="piece_id" id="mark-piece" required class="grow">
+      <option value="">— pick content —</option>
+      {% for p in markPieces %}
+      <option value="{{ p.id }}">{{ p.title }}</option>
       {% endfor %}
     </select>
-    <input type="date" name="scheduled_date" required>
-    <input type="time" name="scheduled_time">
-    <input name="note" placeholder="note (optional)">
-    <button class="btn-primary">Schedule</button>
+    <select name="platform_id" id="mark-platform" required disabled>
+      <option value="">— platform —</option>
+    </select>
+    <input type="date" name="posted_date" value="{{ prefillDate }}" required>
+    <input name="live_url" placeholder="live post URL (optional)">
+    <button class="btn-primary">Mark posted</button>
   </form>
+  <script id="mark-data" type="application/json">{{ platformsByPiece | dump | safe }}</script>
+  <p class="muted small">Records that a piece went live on a platform on that date — same as setting the status to “posted” on the piece page. Tip: click a day number below to pick its date.</p>
 </section>
 
 <div class="cal-header">
@@ -34,15 +38,15 @@
       {% for day in week %}
       <td class="{% if day == today %}cal-today{% endif %}">
         {% if day %}
-        <div class="cal-day">{{ day.slice(8) }}</div>
-        {% for s in slotsByDate[day] %}
-        <div class="cal-slot {% if s.done %}cal-done{% endif %}">
-          <a href="/piece/{{ s.piece_id }}">{{ s.piece_title | truncate(18) }}</a>
-          <span class="muted small">{{ s.platform_name }}{% if s.scheduled_time %} {{ s.scheduled_time }}{% endif %}</span>
-          {% if not s.done %}
-          <form class="inline" method="post" action="/slot/{{ s.id }}/done"><button class="btn-tiny" title="mark done">✓</button></form>
-          {% endif %}
-          <form class="inline" method="post" action="/slot/{{ s.id }}/delete"><button class="btn-tiny" title="delete">✕</button></form>
+        <div class="cal-day"><a href="/calendar?month={{ monthLabel }}&date={{ day }}" title="mark a post published on {{ day }}">{{ day.slice(8) }}</a></div>
+        {% for post in postsByDate[day] %}
+        <div class="cal-slot">
+          <a href="/piece/{{ post.piece_id }}">{{ post.piece_title | truncate(18) }}</a>
+          <span class="muted small">{{ post.platform_name }}</span>
+          {% if post.live_url %}<a href="{{ post.live_url }}" target="_blank" rel="noopener" title="open live post">🔗</a>{% endif %}
+          <form class="inline" method="post" action="/calendar/unmark/{{ post.variant_id }}" onsubmit="return confirm('Un-mark this post? The variant goes back to “ready”.')">
+            <button class="btn-tiny" title="un-mark posted">✕</button>
+          </form>
         </div>
         {% endfor %}
         {% endif %}

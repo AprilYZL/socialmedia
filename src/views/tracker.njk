@@ -3,24 +3,6 @@
 {% block content %}
 <h1>Cross-platform tracker</h1>
 
-{% if dueToday.length %}
-<section class="card due-today">
-  <h2>📅 Ready to publish today</h2>
-  <ul>
-    {% for slot in dueToday %}
-    <li>
-      <a href="/piece/{{ slot.piece_id }}">{{ slot.piece_title }}</a>
-      → {{ slot.platform_name }}
-      {% if slot.scheduled_time %}at {{ slot.scheduled_time }}{% endif %}
-      {% if slot.scheduled_date < today %}<span class="badge badge-err">overdue ({{ slot.scheduled_date }})</span>{% endif %}
-      <span class="badge status-{{ slot.variant_status }}">{{ slot.variant_status }}</span>
-      <form class="inline" method="post" action="/slot/{{ slot.id }}/done"><button class="btn-small">done</button></form>
-    </li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-
 {% if pieces.length %}
 <div class="table-scroll">
 <table class="tracker-table">

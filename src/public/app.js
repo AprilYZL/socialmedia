@@ -52,6 +52,22 @@ document.querySelectorAll('input[data-limit]').forEach((input) => {
   update();
 });
 
+// Calendar "mark as posted": picking a content piece fills the platform
+// select with that piece's not-yet-posted platforms.
+const markPiece = document.getElementById('mark-piece');
+const markPlatform = document.getElementById('mark-platform');
+if (markPiece && markPlatform) {
+  const platformsByPiece = JSON.parse(document.getElementById('mark-data').textContent);
+  const update = () => {
+    const options = platformsByPiece[markPiece.value] || [];
+    markPlatform.replaceChildren(new Option('— platform —', ''));
+    for (const o of options) markPlatform.add(new Option(o.label, o.id));
+    markPlatform.disabled = !options.length;
+  };
+  markPiece.addEventListener('change', update);
+  update();
+}
+
 // Poll import status while a video download runs in the background;
 // reload once when it finishes so the new media asset row appears.
 const importEl = document.querySelector('.import-status[data-piece-id]');
