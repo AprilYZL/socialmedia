@@ -9,6 +9,15 @@ export function composeText(variant) {
   return parts.join('\n\n');
 }
 
+// Full publishable text for a translated article: the Chinese body plus a
+// source-attribution line. Used by the article copy button.
+export function composeArticleText(piece) {
+  const parts = [];
+  if (piece.master_description) parts.push(piece.master_description.trim());
+  if (piece.source_url) parts.push(`——\n原文链接：${piece.source_url}`);
+  return parts.join('\n\n');
+}
+
 export function parseHashtags(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value;

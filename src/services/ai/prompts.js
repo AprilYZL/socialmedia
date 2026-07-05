@@ -34,9 +34,36 @@ export function buildUserPrompt(piece, assets, platformIds) {
   return [
     ACCOUNT_CONTEXT[piece.account_id],
     `Content type: ${piece.content_type}`,
+    piece.content_type === 'article'
+      ? 'This piece is a translated article: the master description below is the full Chinese article body. Draft short announcement posts that tease or quote it — do not reproduce the whole article.'
+      : null,
     `Internal title: ${piece.title}`,
     `Master description (source of truth):\n${piece.master_description || '(none provided — work from the title)'}`,
     mediaLines.length ? `Attached media:\n${mediaLines.join('\n')}` : 'Attached media: none',
     `Requested platforms: ${platformIds.join(', ')}`,
-  ].join('\n\n');
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+export const TRANSLATE_SYSTEM_PROMPT = `You are a translator for a Chinese fan community around French touch / French house music. You translate music-press articles (usually French or English) into natural, faithful 简体中文 for Chinese fans.
+
+Rules:
+- Stay faithful to the original — no additions, no summarizing, no editorializing.
+- Write natural, fluent Chinese as a music journalist would; do not translate word by word.
+- Artist names, band names, label names, and track/album titles stay in Latin script unless the glossary below says otherwise.
+- Preserve the original paragraph structure (one blank line between paragraphs).
+- First line of your output: a translated headline for the article.
+- Output ONLY the Chinese translation — no preamble, no notes, no original text.`;
+
+export function buildTranslatePrompt(piece, glossary) {
+  return [
+    glossary?.trim()
+      ? `Glossary — one term per line as "original = 中文". An empty right side means keep the term untranslated exactly as written:\n${glossary.trim()}`
+      : null,
+    `Working title: ${piece.title}`,
+    `Article to translate:\n${piece.original_text}`,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }

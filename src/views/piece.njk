@@ -8,7 +8,7 @@
   {% if acct %}<span class="badge badge-account" style="--acct: {{ acct.color }}">{{ acct.display_name }}</span>{% endif %}
 </h1>
 {% if piece.source_url %}
-<p class="muted small">Imported from <a href="{{ piece.source_url }}" target="_blank" rel="noopener">{{ piece.source_url }}</a></p>
+<p class="muted small">Source: <a href="{{ piece.source_url }}" target="_blank" rel="noopener">{{ piece.source_url }}</a></p>
 {% endif %}
 
 <section class="card">
@@ -29,12 +29,43 @@
         {% endfor %}
       </select>
     </label>
+    <label>Source URL
+      <input name="source_url" value="{{ piece.source_url }}" placeholder="https://… where this content came from (optional)">
+    </label>
+    {% if piece.content_type == 'article' %}
+    <div class="translate-grid">
+      <label>Original article (paste the source text)
+        <textarea name="original_text" rows="18" placeholder="Paste the full article in its original language here, then Save.">{{ piece.original_text }}</textarea>
+      </label>
+      <label>中文译文 (publish text)
+        <textarea name="master_description" rows="18" placeholder="The Chinese translation — use the Translate button below or write it here.">{{ piece.master_description }}</textarea>
+      </label>
+    </div>
+    {% else %}
     <label>Master description
       <textarea name="master_description" rows="6">{{ piece.master_description }}</textarea>
     </label>
+    {% endif %}
     <button class="btn-primary">Save</button>
   </form>
 </section>
+
+{% if piece.content_type == 'article' %}
+<section class="card">
+  <h2>🌐 Article translation</h2>
+  <div class="row wrap">
+    <form method="post" action="/piece/{{ piece.id }}/translate">
+      <button class="btn-primary"
+        {% if piece.master_description %}onclick="if (!confirm('Overwrite the current Chinese text with a fresh AI translation?')) return false; this.textContent='Translating… (~1 min)'"
+        {% else %}onclick="this.textContent='Translating… (~1 min)'"{% endif %}>✨ Translate to Chinese</button>
+    </form>
+    {% if piece.master_description %}
+    <button class="copy-btn" data-copy="{{ articleCopyText }}">📋 复制文章全文（含出处）</button>
+    {% endif %}
+  </div>
+  <p class="muted small">Translate uses the last <strong>saved</strong> original text — hit Save above first. The copy button appends the source-credit line (原文链接) when a Source URL is set. Glossary terms are managed in <a href="/settings">Settings</a>.</p>
+</section>
+{% endif %}
 
 <section class="card">
   <h2>Media files</h2>

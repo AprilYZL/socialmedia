@@ -27,6 +27,9 @@ if (pieceCols.length && !pieceCols.includes('account_id')) {
   // column-missing branch so it never reruns on later boots.
   db.exec("UPDATE content_pieces SET account_id = 'justicecn'");
 }
+if (pieceCols.length && !pieceCols.includes('original_text')) {
+  db.exec('ALTER TABLE content_pieces ADD COLUMN original_text TEXT');
+}
 
 const schema = fs.readFileSync(path.join(config.root, 'src', 'db', 'schema.sql'), 'utf8');
 db.exec(schema);

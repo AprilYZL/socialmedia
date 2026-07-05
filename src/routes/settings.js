@@ -41,9 +41,17 @@ settingsRouter.get('/settings', (req, res) => {
     templates,
     defaultSets,
     namedGroups,
+    glossary: getSetting('translation_glossary', ''),
     msg: req.query.msg,
     err: req.query.err,
   });
+});
+
+// Unconditional set (unlike POST /settings, which skips empty fields) so the
+// glossary can be cleared.
+settingsRouter.post('/settings/glossary', (req, res) => {
+  setSetting('translation_glossary', (req.body.glossary || '').trim());
+  res.redirect('/settings?msg=' + encodeURIComponent('Glossary saved'));
 });
 
 // Save per-platform title/caption templates ({title}/{description} placeholders).

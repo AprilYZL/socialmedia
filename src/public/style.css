@@ -129,6 +129,10 @@ th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
 .status-failed { border-color: var(--err); color: var(--err); }
 .status-skipped { color: var(--muted); text-decoration: line-through; }
 
+.translate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+.translate-grid textarea { min-height: 16rem; resize: vertical; }
+@media (max-width: 900px) { .translate-grid { grid-template-columns: 1fr; } }
+
 .variant-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));

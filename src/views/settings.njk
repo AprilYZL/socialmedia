@@ -72,6 +72,15 @@
 </section>
 
 <section class="card">
+  <h2>Translation glossary</h2>
+  <p class="muted">Used by the article "Translate to Chinese" button so recurring terms come out consistent. One term per line as <code>original = 中文</code>; leave the right side empty to keep the term untranslated (e.g. <code>French touch = 法式电音</code>, <code>Ed Banger Records =</code>).</p>
+  <form method="post" action="/settings/glossary" class="stack">
+    <textarea name="glossary" rows="8" placeholder="French touch = 法式电音&#10;Ed Banger Records =&#10;Justice =">{{ glossary }}</textarea>
+    <button class="btn-primary">Save glossary</button>
+  </form>
+</section>
+
+<section class="card">
   <h2>Accounts &amp; platform logins</h2>
   <p class="muted">Each account gets its own persistent browser profile per platform, so you only log in once per combination (QR code for the Chinese platforms). Click a login button, sign in in the window that opens, then simply close it. The per-account toggle marks whether that account exists on the platform — disabled combinations disappear from that account's draft cards and pickers.</p>
   <div class="table-scroll">

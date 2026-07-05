@@ -17,7 +17,8 @@ const app = express();
 nunjucks.configure(config.viewsDir, { autoescape: true, express: app, noCache: true });
 app.set('view engine', 'njk');
 
-app.use(express.urlencoded({ extended: true }));
+// 2mb: pasted article bodies blow past the 100kb default (URL-encoded CJK is ~9 bytes/char)
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use('/static', express.static(config.publicDir));
 
 // Account middleware feeds the nav switcher on every page — keep it first.

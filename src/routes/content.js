@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import fs from 'node:fs';
-import { db } from '../db/index.js';
+import { db, getSetting } from '../db/index.js';
 import { probe, checkConstraints } from '../services/media.js';
-import { composeText } from '../services/compose.js';
+import { composeText, composeArticleText } from '../services/compose.js';
+import { translateArticle } from '../services/ai/translateArticle.js';
 import { getStagingStatus } from '../uploaders/index.js';
 import {
   normalizeUrl,
@@ -164,6 +165,7 @@ contentRouter.get('/piece/:id', (req, res) => {
     cards,
     namedGroups,
     contentTypes: CONTENT_TYPES,
+    articleCopyText: composeArticleText(piece),
     importStatus: getImportStatus(piece.id),
     msg: req.query.msg,
     err: req.query.err,
@@ -171,17 +173,54 @@ contentRouter.get('/piece/:id', (req, res) => {
 });
 
 contentRouter.post('/piece/:id', (req, res) => {
-  const { title, content_type, master_description, account_id } = req.body;
-  db.prepare(
-    'UPDATE content_pieces SET title = ?, content_type = ?, master_description = ?, account_id = COALESCE(?, account_id) WHERE id = ?'
-  ).run(
-    title?.trim() || 'Untitled',
-    CONTENT_TYPES.includes(content_type) ? content_type : 'short_video',
-    master_description || '',
-    isAccountId(account_id) ? account_id : null,
-    req.params.id
-  );
+  const { title, content_type, master_description, account_id, original_text, source_url } = req.body;
+  try {
+    db.prepare(
+      `UPDATE content_pieces SET title = ?, content_type = ?, master_description = ?,
+         account_id = COALESCE(?, account_id),
+         original_text = COALESCE(?, original_text),
+         source_url = ?
+       WHERE id = ?`
+    ).run(
+      title?.trim() || 'Untitled',
+      CONTENT_TYPES.includes(content_type) ? content_type : 'short_video',
+      master_description || '',
+      isAccountId(account_id) ? account_id : null,
+      // Only article forms submit original_text; COALESCE keeps the old value
+      // when the field is absent, while a submitted empty string clears it.
+      original_text ?? null,
+      // Blank must be NULL, not '' — the partial unique index only exempts NULL.
+      (source_url || '').trim() || null,
+      req.params.id
+    );
+  } catch (err) {
+    if (String(err.code || '').startsWith('SQLITE_CONSTRAINT')) {
+      const other = findBySourceUrl((source_url || '').trim());
+      const label = other ? `piece #${other.id}` : 'another piece';
+      return res.redirect(
+        `/piece/${req.params.id}?err=` + encodeURIComponent(`Source URL already used by ${label} — not saved.`)
+      );
+    }
+    throw err;
+  }
   res.redirect(`/piece/${req.params.id}?msg=` + encodeURIComponent('Saved'));
+});
+
+// AI-translate the saved original article text into Chinese; the result
+// replaces master_description (the publish text).
+contentRouter.post('/piece/:id/translate', async (req, res) => {
+  const piece = db.prepare('SELECT * FROM content_pieces WHERE id = ?').get(req.params.id);
+  if (!piece) return res.status(404).send('Not found');
+  if (!piece.original_text?.trim()) {
+    return res.redirect(`/piece/${piece.id}?err=` + encodeURIComponent('Paste and save the original text first.'));
+  }
+  try {
+    const translation = await translateArticle({ piece, glossary: getSetting('translation_glossary', '') });
+    db.prepare('UPDATE content_pieces SET master_description = ? WHERE id = ?').run(translation, piece.id);
+    res.redirect(`/piece/${piece.id}?msg=` + encodeURIComponent('Translated — review side by side below.'));
+  } catch (err) {
+    res.redirect(`/piece/${piece.id}?err=` + encodeURIComponent(`Translation failed: ${err.message}`));
+  }
 });
 
 contentRouter.post('/piece/:id/archive', (req, res) => {

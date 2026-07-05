@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS content_pieces (
   title TEXT NOT NULL,
   content_type TEXT NOT NULL,       -- 'short_video' | 'long_video' | 'article' | 'poster'
   master_description TEXT,
+  original_text TEXT,               -- pasted original-language article body ('article' pieces)
   language TEXT DEFAULT 'zh',
   tags TEXT,                        -- JSON array, internal organization
   source_url TEXT,                  -- normalized origin URL for imported pieces; NULL if created manually
