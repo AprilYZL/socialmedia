@@ -1,0 +1,58 @@
+{% extends "layout.njk" %}
+{% block title %}Tracker{% endblock %}
+{% block content %}
+<h1>Cross-platform tracker</h1>
+
+{% if dueToday.length %}
+<section class="card due-today">
+  <h2>📅 Ready to publish today</h2>
+  <ul>
+    {% for slot in dueToday %}
+    <li>
+      <a href="/piece/{{ slot.piece_id }}">{{ slot.piece_title }}</a>
+      → {{ slot.platform_name }}
+      {% if slot.scheduled_time %}at {{ slot.scheduled_time }}{% endif %}
+      {% if slot.scheduled_date < today %}<span class="badge badge-err">overdue ({{ slot.scheduled_date }})</span>{% endif %}
+      <span class="badge status-{{ slot.variant_status }}">{{ slot.variant_status }}</span>
+      <form class="inline" method="post" action="/slot/{{ slot.id }}/done"><button class="btn-small">done</button></form>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if pieces.length %}
+<div class="table-scroll">
+<table class="tracker-table">
+  <thead>
+    <tr>
+      <th>Content</th>
+      <th>Type</th>
+      {% for p in platforms %}<th>{{ p.display_name }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for piece in pieces %}
+    <tr>
+      <td><a href="/piece/{{ piece.id }}">{{ piece.title }}</a></td>
+      <td class="muted">{{ piece.content_type | replace("_", " ") }}</td>
+      {% for p in platforms %}
+        {% set v = byPiece[piece.id][p.id] if byPiece[piece.id] else null %}
+        <td>
+          {% if v %}
+            <span class="badge status-{{ v.status }}">{{ v.status }}</span>
+            {% if v.live_url %}<a href="{{ v.live_url }}" target="_blank" title="open live post">🔗</a>{% endif %}
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">No content yet. <a href="/library">Create your first piece in the Library →</a></p>
+{% endif %}
+{% endblock %}

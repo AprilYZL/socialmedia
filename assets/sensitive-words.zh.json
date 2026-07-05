@@ -1,0 +1,17 @@
+[
+  { "word": "最好", "reason": "广告法极限词（superlative banned by ad law）" },
+  { "word": "最佳", "reason": "广告法极限词" },
+  { "word": "第一", "reason": "广告法极限词（\"No.1\" claims risk takedown）" },
+  { "word": "顶级", "reason": "广告法极限词" },
+  { "word": "国家级", "reason": "广告法极限词" },
+  { "word": "全网最", "reason": "广告法极限词" },
+  { "word": "加微信", "reason": "站外引流：平台会限流或删除（off-platform traffic diversion）" },
+  { "word": "加群", "reason": "站外引流" },
+  { "word": "QQ群", "reason": "站外引流" },
+  { "word": "私聊", "reason": "可能被判定为引流" },
+  { "word": "淘宝", "reason": "竞品/外链平台名，部分平台会限流" },
+  { "word": "微店", "reason": "站外交易引流" },
+  { "word": "抽奖", "reason": "抽奖活动需平台报备，否则可能违规" },
+  { "word": "转发关注", "reason": "诱导互动，可能被限流" },
+  { "word": "点击链接", "reason": "诱导跳转，部分平台限制" }
+]

@@ -1,0 +1,56 @@
+{% extends "layout.njk" %}
+{% block title %}Calendar{% endblock %}
+{% block content %}
+<h1>Calendar</h1>
+
+<section class="card">
+  <h2>Schedule a post</h2>
+  <form method="post" action="/calendar" class="row wrap">
+    <select name="variant_id" required class="grow">
+      <option value="">— pick content × platform —</option>
+      {% for v in variantOptions %}
+      <option value="{{ v.id }}">{{ v.piece_title }} → {{ v.platform_name }} ({{ v.status }})</option>
+      {% endfor %}
+    </select>
+    <input type="date" name="scheduled_date" required>
+    <input type="time" name="scheduled_time">
+    <input name="note" placeholder="note (optional)">
+    <button class="btn-primary">Schedule</button>
+  </form>
+</section>
+
+<div class="cal-header">
+  <a href="/calendar?month={{ prev }}">← {{ prev }}</a>
+  <h2>{{ monthLabel }}</h2>
+  <a href="/calendar?month={{ next }}">{{ next }} →</a>
+</div>
+
+<div class="table-scroll">
+<table class="calendar">
+  <thead><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr></thead>
+  <tbody>
+    {% for week in weeks %}
+    <tr>
+      {% for day in week %}
+      <td class="{% if day == today %}cal-today{% endif %}">
+        {% if day %}
+        <div class="cal-day">{{ day.slice(8) }}</div>
+        {% for s in slotsByDate[day] %}
+        <div class="cal-slot {% if s.done %}cal-done{% endif %}">
+          <a href="/piece/{{ s.piece_id }}">{{ s.piece_title | truncate(18) }}</a>
+          <span class="muted small">{{ s.platform_name }}{% if s.scheduled_time %} {{ s.scheduled_time }}{% endif %}</span>
+          {% if not s.done %}
+          <form class="inline" method="post" action="/slot/{{ s.id }}/done"><button class="btn-tiny" title="mark done">✓</button></form>
+          {% endif %}
+          <form class="inline" method="post" action="/slot/{{ s.id }}/delete"><button class="btn-tiny" title="delete">✕</button></form>
+        </div>
+        {% endfor %}
+        {% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

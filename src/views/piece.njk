@@ -1,0 +1,141 @@
+{% extends "layout.njk" %}
+{% block title %}{{ piece.title }}{% endblock %}
+{% block content %}
+<p><a href="/library">← Library</a></p>
+<h1>{{ piece.title }}</h1>
+
+<section class="card">
+  <h2>Master content</h2>
+  <form method="post" action="/piece/{{ piece.id }}" class="stack">
+    <label>Working title <input name="title" value="{{ piece.title }}" required></label>
+    <label>Type
+      <select name="content_type">
+        {% for t in contentTypes %}
+        <option value="{{ t }}" {% if t == piece.content_type %}selected{% endif %}>{{ t | replace("_", " ") }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Master description
+      <textarea name="master_description" rows="6">{{ piece.master_description }}</textarea>
+    </label>
+    <button class="btn-primary">Save</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Media files</h2>
+  {% if assets.length %}
+  <ul class="media-list">
+    {% for a in assets %}
+    <li>
+      <code>{{ a.file_path }}</code>
+      <span class="muted">
+        {{ a.kind }}{% if a.width %}, {{ a.width }}×{{ a.height }}{% endif %}{% if a.duration_sec %}, {{ a.duration_sec | round }}s{% endif %}{% if a.size_bytes %}, {{ (a.size_bytes / 1048576) | round(1) }} MB{% endif %} ({{ a.role }})
+      </span>
+      <form class="inline" method="post" action="/media/{{ a.id }}/delete"><button class="btn-small">remove</button></form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No media yet.</p>
+  {% endif %}
+  <form method="post" action="/piece/{{ piece.id }}/media" class="row">
+    <input name="file_path" placeholder="/absolute/path/to/video.mp4 — tip: in Finder, right-click a file with ⌥ Option held and 'Copy as Pathname'" class="grow" required>
+    <select name="role">
+      <option value="primary">primary</option>
+      <option value="cover">cover</option>
+      <option value="extra_image">extra image</option>
+    </select>
+    <button>Add</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>✨ Generate platform drafts with AI</h2>
+  <form method="post" action="/piece/{{ piece.id }}/generate" class="row wrap">
+    {% for c in cards %}
+    <label class="checkbox"><input type="checkbox" name="platforms" value="{{ c.platform.id }}" checked> {{ c.platform.display_name }}</label>
+    {% endfor %}
+    <button class="btn-primary" onclick="this.textContent='Generating… (~20s)'">Generate drafts</button>
+  </form>
+  <p class="muted">One master description in → tuned titles, captions, hashtags and translations out. Existing drafts for the selected platforms are overwritten.</p>
+</section>
+
+<h2>Platform variants</h2>
+<div class="variant-grid">
+  {% for c in cards %}
+  <section class="card variant-card">
+    <h3>
+      {{ c.platform.display_name }}
+      {% if c.variant %}<span class="badge status-{{ c.variant.status }}">{{ c.variant.status }}</span>{% endif %}
+      {% if c.variant and c.variant.ai_generated %}<span class="badge badge-ai">AI draft</span>{% endif %}
+    </h3>
+    {% if c.constraints %}
+    <p class="muted small">
+      {{ c.constraints.ratio }}{% if c.constraints.title_limit %} · title ≤ {{ c.constraints.title_limit }} chars{% endif %}{% if c.constraints.max_duration_s %} · ≤ {{ (c.constraints.max_duration_s / 60) | round }} min{% endif %}
+    </p>
+    {% endif %}
+    {% for w in c.mediaWarnings %}
+    <div class="flash flash-warn small">⚠️ {{ w }}</div>
+    {% endfor %}
+
+    {% if c.variant %}
+      {% for f in c.flags %}
+      <div class="flash flash-warn small">🚩 「{{ f.word }}」 — {{ f.reason }} <span class="muted">({{ f.source }})</span></div>
+      {% endfor %}
+
+      <form method="post" action="/variant/{{ c.variant.id }}" class="stack">
+        <label>Title
+          <input name="title" value="{{ c.variant.title }}"
+            {% if c.constraints.title_limit %}data-limit="{{ c.constraints.title_limit }}"{% endif %}>
+        </label>
+        <label>Caption <textarea name="caption" rows="6">{{ c.variant.caption }}</textarea></label>
+        <label>Hashtags (space-separated, no #) <input name="hashtags" value="{{ c.hashtagsText }}"></label>
+        {% if c.defaultTags.length or namedGroups.length %}
+        <div class="chip-row">
+          {% if c.defaultTags.length %}
+          <span class="chip chip-default" data-tags="{{ c.defaultTags | dump }}" title="{{ c.defaultTags | join(' ') }}">+ {{ c.platform.display_name }} defaults</span>
+          {% endif %}
+          {% for g in namedGroups %}
+          <span class="chip" data-tags="{{ g.tags | dump }}" title="{{ g.tags | join(' ') }}">+ {{ g.name }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <label>Live URL (after publishing) <input name="live_url" value="{{ c.variant.live_url }}" placeholder="paste the published post link"></label>
+        <div class="row">
+          <select name="status">
+            {% for s in ['draft', 'ready', 'staged', 'posted', 'failed', 'skipped'] %}
+            <option value="{{ s }}" {% if s == c.variant.status %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+          <button class="btn-primary">Save</button>
+        </div>
+      </form>
+
+      <div class="row variant-actions">
+        <form method="post" action="/piece/{{ piece.id }}/variant/{{ c.platform.id }}/fill">
+          <button title="Copy the master title/description into this draft (applies this platform's template from Settings, if set). Hashtags are kept.">⇩ Fill from master</button>
+        </form>
+        <button class="copy-btn" data-copy="{{ c.composed }}">📋 Copy post text</button>
+        <form method="post" action="/variant/{{ c.variant.id }}/stage">
+          <button title="Opens the platform in a logged-in browser, uploads the file and fills the form. You click Publish.">🚀 Stage upload</button>
+        </form>
+      </div>
+      <div class="staging-status" data-variant-id="{{ c.variant.id }}">
+        {% if c.staging %}<span class="staging-{{ c.staging.state }}">{{ c.staging.message }}</span>{% endif %}
+      </div>
+    {% else %}
+      <p class="muted">No draft yet.</p>
+      <div class="row">
+        <form method="post" action="/piece/{{ piece.id }}/variant/{{ c.platform.id }}/fill">
+          <button title="Create this draft from the master title/description (applies this platform's template from Settings, if set)">⇩ Fill from master</button>
+        </form>
+        <form method="post" action="/piece/{{ piece.id }}/variant/{{ c.platform.id }}/create">
+          <button class="btn-small">Create empty draft</button>
+        </form>
+      </div>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

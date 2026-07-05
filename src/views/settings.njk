@@ -1,0 +1,101 @@
+{% extends "layout.njk" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<section class="card">
+  <h2>AI drafting</h2>
+  <form method="post" action="/settings" class="stack">
+    <label>Anthropic API key {% if maskedKey %}<span class="muted">(current: {{ maskedKey }})</span>{% endif %}
+      <input name="anthropic_api_key" type="password" placeholder="{% if maskedKey %}leave blank to keep current key{% else %}sk-ant-…{% endif %}">
+    </label>
+    <label>Model <input name="model" value="{{ model }}"></label>
+    <label>Seconds between upload stagings (throttle) <input name="throttle_seconds" type="number" min="0" value="{{ throttle }}"></label>
+    <button class="btn-primary">Save</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Post templates (no-AI drafting)</h2>
+  <p class="muted">Used by the "⇩ Fill from master" button on each draft card. <code>{title}</code> and <code>{description}</code> are replaced with the piece's master title and description. Leave blank for a plain copy.</p>
+  <form method="post" action="/settings/templates" class="stack">
+    {% for p in platforms %}
+    <fieldset class="template-row">
+      <legend>{{ p.display_name }}</legend>
+      <div class="row wrap">
+        <label class="grow">Title template
+          <input name="title_{{ p.id }}" value="{{ templates[p.id].title_template if templates[p.id] }}" placeholder="e.g. 【法式电音】{title}">
+        </label>
+        <label class="grow">Caption template
+          <input name="caption_{{ p.id }}" value="{{ templates[p.id].caption_template if templates[p.id] }}" placeholder="e.g. {description} —— 关注我看更多法式现场">
+        </label>
+      </div>
+    </fieldset>
+    {% endfor %}
+    <button class="btn-primary">Save templates</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Hashtag library</h2>
+  <h3>Per-platform defaults</h3>
+  <p class="muted">Each draft card gets a "+ defaults" chip that fills these in. Space-separated, no #.</p>
+  <form method="post" action="/settings/hashtag-defaults" class="stack">
+    {% for p in platforms %}
+    <label>{{ p.display_name }}
+      <input name="defaults_{{ p.id }}" value="{{ defaultSets[p.id] }}" placeholder="e.g. 法式电音 电子音乐">
+    </label>
+    {% endfor %}
+    <button class="btn-primary">Save defaults</button>
+  </form>
+
+  <h3>Named groups</h3>
+  <p class="muted">Groups show as clickable chips on every draft card — click to append their tags.</p>
+  {% for g in namedGroups %}
+  <div class="row wrap group-row">
+    <form method="post" action="/settings/hashtag-group" class="row wrap grow">
+      <input type="hidden" name="id" value="{{ g.id }}">
+      <input name="name" value="{{ g.name }}" placeholder="group name">
+      <input name="tags" value="{{ g.tagsText }}" class="grow" placeholder="tags, space-separated">
+      <button class="btn-small">Save</button>
+    </form>
+    <form method="post" action="/settings/hashtag-group/{{ g.id }}/delete">
+      <button class="btn-small" onclick="return confirm('Delete group {{ g.name }}?')">delete</button>
+    </form>
+  </div>
+  {% endfor %}
+  <form method="post" action="/settings/hashtag-group" class="row wrap">
+    <input name="name" placeholder="new group name (e.g. Justice)">
+    <input name="tags" class="grow" placeholder="Justice JusticeLive 贾斯提斯">
+    <button>Add group</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Platform logins</h2>
+  <p class="muted">Each platform gets its own persistent browser profile, so you only log in once (QR code for the Chinese platforms). Click a button, sign in in the window that opens, then simply close it.</p>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Platform</th><th>Enabled</th><th>Profile</th><th></th></tr></thead>
+    <tbody>
+      {% for p in platforms %}
+      <tr>
+        <td>{{ p.display_name }}</td>
+        <td>
+          <form class="inline" method="post" action="/settings/platform/{{ p.id }}/toggle">
+            <button class="btn-small">{{ "✅ on" if p.enabled else "⬜ off" }}</button>
+          </form>
+        </td>
+        <td class="muted">{{ "profile exists" if p.hasProfile else "not logged in yet" }}</td>
+        <td>
+          <form class="inline" method="post" action="/settings/login/{{ p.id }}">
+            <button class="btn-small">Open login window</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

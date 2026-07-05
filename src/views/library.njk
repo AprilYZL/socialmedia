@@ -1,0 +1,48 @@
+{% extends "layout.njk" %}
+{% block title %}Library{% endblock %}
+{% block content %}
+<h1>Content library</h1>
+
+<section class="card">
+  <h2>New content piece</h2>
+  <form method="post" action="/library" class="stack">
+    <label>Working title <input name="title" required placeholder="e.g. Justice – Hyperdrama live clip, Shanghai reaction"></label>
+    <label>Type
+      <select name="content_type">
+        {% for t in contentTypes %}<option value="{{ t }}">{{ t | replace("_", " ") }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Master description — the single source of truth the AI drafts from
+      <textarea name="master_description" rows="5" placeholder="What is this content? Artist, track, what happens in the video, why it's interesting. Write in whichever language is natural — drafts come out in zh + en."></textarea>
+    </label>
+    <button class="btn-primary">Create</button>
+  </form>
+</section>
+
+<h2>All pieces</h2>
+{% if pieces.length %}
+<div class="table-scroll">
+<table>
+  <thead><tr><th>Title</th><th>Type</th><th>Media</th><th>Variants</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+    {% for p in pieces %}
+    <tr>
+      <td><a href="/piece/{{ p.id }}">{{ p.title }}</a></td>
+      <td class="muted">{{ p.content_type | replace("_", " ") }}</td>
+      <td>{{ p.media_count }}</td>
+      <td>{{ p.variant_count }}/6</td>
+      <td class="muted">{{ p.created_at }}</td>
+      <td>
+        <form method="post" action="/piece/{{ p.id }}/archive" onsubmit="return confirm('Archive this piece?')">
+          <button class="btn-small">archive</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">Nothing here yet — create your first piece above.</p>
+{% endif %}
+{% endblock %}

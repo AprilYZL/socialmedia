@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Promoter{% endblock %} · Promoter</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="nav">
+    <span class="brand">🎧 Promoter</span>
+    <a href="/">Tracker</a>
+    <a href="/library">Library</a>
+    <a href="/calendar">Calendar</a>
+    <a href="/settings">Settings</a>
+  </nav>
+
+  <main class="container">
+    {% if msg %}<div class="flash flash-ok">{{ msg }}</div>{% endif %}
+    {% if err %}<div class="flash flash-err">{{ err }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
