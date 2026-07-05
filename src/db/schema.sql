@@ -15,9 +15,13 @@ CREATE TABLE IF NOT EXISTS content_pieces (
   master_description TEXT,
   language TEXT DEFAULT 'zh',
   tags TEXT,                        -- JSON array, internal organization
+  source_url TEXT,                  -- normalized origin URL for imported pieces; NULL if created manually
   created_at TEXT DEFAULT (datetime('now')),
   archived INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_content_pieces_source_url
+  ON content_pieces(source_url) WHERE source_url IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS media_assets (
   id INTEGER PRIMARY KEY,

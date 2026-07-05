@@ -52,6 +52,29 @@ document.querySelectorAll('input[data-limit]').forEach((input) => {
   update();
 });
 
+// Poll import status while a video download runs in the background;
+// reload once when it finishes so the new media asset row appears.
+const importEl = document.querySelector('.import-status[data-piece-id]');
+if (importEl) {
+  const importTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/piece/${importEl.dataset.pieceId}/import-status`);
+      const data = await res.json();
+      if (!data.importing) return;
+      const span = document.createElement('span');
+      span.className = `staging-${data.importing.state}`;
+      span.textContent = data.importing.message;
+      importEl.replaceChildren(span);
+      if (data.importing.state === 'done') {
+        clearInterval(importTimer);
+        location.reload();
+      }
+    } catch {
+      /* server briefly unavailable — keep last message */
+    }
+  }, 2500);
+}
+
 // Poll staging status while an upload is being staged
 const stagingEls = document.querySelectorAll('.staging-status[data-variant-id]');
 if (stagingEls.length) {

@@ -3,6 +3,9 @@
 {% block content %}
 <p><a href="/library">← Library</a></p>
 <h1>{{ piece.title }}</h1>
+{% if piece.source_url %}
+<p class="muted small">Imported from <a href="{{ piece.source_url }}" target="_blank" rel="noopener">{{ piece.source_url }}</a></p>
+{% endif %}
 
 <section class="card">
   <h2>Master content</h2>
@@ -38,6 +41,11 @@
   </ul>
   {% else %}
   <p class="muted">No media yet.</p>
+  {% endif %}
+  {% if importStatus and importStatus.state != 'done' %}
+  <div class="import-status staging-status" data-piece-id="{{ piece.id }}">
+    <span class="staging-{{ importStatus.state }}">{{ importStatus.message }}</span>
+  </div>
   {% endif %}
   <form method="post" action="/piece/{{ piece.id }}/media" class="row">
     <input name="file_path" placeholder="/absolute/path/to/video.mp4 — tip: in Finder, right-click a file with ⌥ Option held and 'Copy as Pathname'" class="grow" required>

@@ -1,11 +1,47 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { config } from '../config.js';
 
 // One persistent Chromium profile per platform so QR-code / password logins
 // survive app restarts. Contexts are kept open after staging so the user can
-// review and click Publish; quitting the app closes them.
+// review and click Publish; closeAllProfiles() closes them cleanly on server
+// shutdown — Chromium only reliably flushes cookies to disk on a clean close,
+// so killing the browsers would lose any login done during the session.
 const contexts = new Map();
+
+// Belt and suspenders for logins: the profile dir only gets cookies on a
+// clean close, so we also snapshot cookies to JSON while the browser is open
+// and restore them on the next launch. Survives crashes and force-kills.
+const SNAPSHOT_INTERVAL_MS = 45000;
+
+function cookieSnapshotPath(platformId) {
+  return path.join(config.profilesDir, `${platformId}.cookies.json`);
+}
+
+export async function snapshotCookies(platformId) {
+  const ctx = contexts.get(platformId);
+  if (!ctx || ctx._closed) return;
+  try {
+    const cookies = await ctx.cookies();
+    if (cookies.length) fs.writeFileSync(cookieSnapshotPath(platformId), JSON.stringify(cookies));
+  } catch {
+    // context closed mid-snapshot — the previous snapshot still applies
+  }
+}
+
+async function restoreCookies(platformId, ctx) {
+  const file = cookieSnapshotPath(platformId);
+  if (!fs.existsSync(file)) return;
+  try {
+    const cookies = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const now = Date.now() / 1000;
+    const fresh = cookies.filter((c) => !c.expires || c.expires === -1 || c.expires > now);
+    if (fresh.length) await ctx.addCookies(fresh);
+  } catch {
+    // corrupt snapshot — whatever the profile dir has still applies
+  }
+}
 
 export async function launchProfile(platformId) {
   const existing = contexts.get(platformId);
@@ -24,12 +60,27 @@ export async function launchProfile(platformId) {
     viewport: null,
     args: ['--disable-blink-features=AutomationControlled'],
   });
+  await restoreCookies(platformId, ctx);
+  const snapshotTimer = setInterval(() => snapshotCookies(platformId), SNAPSHOT_INTERVAL_MS);
   ctx.on('close', () => {
+    clearInterval(snapshotTimer);
     ctx._closed = true;
     contexts.delete(platformId);
   });
   contexts.set(platformId, ctx);
   return ctx;
+}
+
+// Snapshot cookies, then close every open context cleanly so Chromium
+// flushes logins to the profile dirs. Called from the server's shutdown hook.
+export async function closeAllProfiles() {
+  const entries = [...contexts.entries()];
+  await Promise.allSettled(
+    entries.map(async ([platformId, ctx]) => {
+      await snapshotCookies(platformId);
+      await ctx.close();
+    })
+  );
 }
 
 export async function getPage(ctx) {

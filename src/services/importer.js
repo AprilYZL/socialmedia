@@ -1,0 +1,185 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { db } from '../db/index.js';
+import { config } from '../config.js';
+import { probe } from './media.js';
+import { launchProfile, getPage } from '../uploaders/baseUploader.js';
+
+const execFileAsync = promisify(execFile);
+
+// Homebrew paths first: a GUI-launched Node process may not have brew on PATH.
+const YTDLP_CANDIDATES = ['/opt/homebrew/bin/yt-dlp', '/usr/local/bin/yt-dlp'];
+function ytdlpPath() {
+  return YTDLP_CANDIDATES.find((p) => fs.existsSync(p)) || 'yt-dlp';
+}
+
+const cookiesFile = path.join(config.dataDir, 'cookies-instagram.txt');
+
+const TIKTOK_HOSTS = new Set(['tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com']);
+const INSTAGRAM_HOSTS = new Set(['instagram.com', 'instagr.am']);
+
+// Normalize a pasted URL for dedup: https, canonical host, no query/hash.
+// Short links (vm.tiktok.com) stay as-is; the canonical webpage_url from
+// yt-dlp resolves them for the second dedup pass.
+export function normalizeUrl(raw) {
+  let u;
+  try {
+    u = new URL(String(raw || '').trim());
+  } catch {
+    throw new Error('That does not look like a valid URL.');
+  }
+  let host = u.hostname.toLowerCase().replace(/^(www|m)\./, '');
+  if (!TIKTOK_HOSTS.has(host) && !INSTAGRAM_HOSTS.has(host)) {
+    throw new Error('Only TikTok and Instagram URLs are supported.');
+  }
+  let pathname = u.pathname.replace(/\/+$/, '');
+  if (INSTAGRAM_HOSTS.has(host)) {
+    host = 'instagram.com';
+    pathname = pathname.replace(/^\/reels\//, '/reel/');
+    const m = pathname.match(/^\/[^/]+(\/(?:reel|p|tv)\/.+)$/);
+    if (m) pathname = m[1];
+  }
+  return `https://${host}${pathname}`;
+}
+
+function firstErrorLine(err) {
+  const line = String(err.stderr || '')
+    .split('\n')
+    .find((l) => l.startsWith('ERROR:'));
+  return line ? line.replace(/^ERROR:\s*/, '').slice(0, 300) : String(err.message || err).slice(0, 300);
+}
+
+// Fetch title/description without downloading. On an auth-walled Instagram
+// post, export cookies from the app's logged-in Playwright profile and retry.
+export async function fetchMetadata(url) {
+  const baseArgs = ['--dump-single-json', '--no-download', '--no-playlist', '--socket-timeout', '15'];
+  const opts = { timeout: 60000, maxBuffer: 20 * 1024 * 1024 };
+  let usedCookies = false;
+  let stdout;
+  try {
+    ({ stdout } = await execFileAsync(ytdlpPath(), [...baseArgs, url], opts));
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      throw new Error('yt-dlp is not installed — run: brew install yt-dlp');
+    }
+    const authWalled = /login|cookie|authentication|not available|rate.?limit|restricted/i.test(err.stderr || '');
+    if (!(authWalled && url.includes('instagram.com'))) {
+      throw new Error(firstErrorLine(err));
+    }
+    await exportInstagramCookies();
+    usedCookies = true;
+    try {
+      ({ stdout } = await execFileAsync(ytdlpPath(), [...baseArgs, '--cookies', cookiesFile, url], opts));
+    } catch (err2) {
+      throw new Error(firstErrorLine(err2));
+    }
+  }
+
+  const info = JSON.parse(stdout);
+  const description = (info.description || '').trim();
+  let title = (info.title || '').trim();
+  if (!title) {
+    const firstLine = description.split('\n')[0].trim();
+    title = firstLine && firstLine.length <= 60 ? firstLine : `${info.extractor_key || 'Video'} ${info.id || ''}`.trim();
+  }
+  if (title.length > 120) title = title.slice(0, 120);
+
+  let canonicalUrl;
+  try {
+    canonicalUrl = normalizeUrl(info.webpage_url || url);
+  } catch {
+    canonicalUrl = url;
+  }
+  return { title, description, canonicalUrl, usedCookies };
+}
+
+// Write the Playwright profile's Instagram cookies as a Netscape cookies.txt
+// that yt-dlp can read. --cookies-from-browser can't be used: Playwright's
+// Chromium encrypts its cookie store with a mock keychain on macOS.
+async function exportInstagramCookies() {
+  const ctx = await launchProfile('instagram');
+  const cookies = await ctx.cookies(['https://www.instagram.com', 'https://instagram.com']);
+  if (!cookies.some((c) => c.name === 'sessionid' && c.value)) {
+    const page = await getPage(ctx);
+    await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded' }).catch(() => {});
+    throw new Error('Instagram requires login — log in in the browser window that just opened, then retry the import.');
+  }
+  const lines = ['# Netscape HTTP Cookie File'];
+  for (const c of cookies) {
+    lines.push(
+      [
+        c.domain,
+        c.domain.startsWith('.') ? 'TRUE' : 'FALSE',
+        c.path,
+        c.secure ? 'TRUE' : 'FALSE',
+        c.expires && c.expires > 0 ? Math.floor(c.expires) : 0,
+        c.name,
+        c.value,
+      ].join('\t')
+    );
+  }
+  fs.writeFileSync(cookiesFile, lines.join('\n') + '\n');
+}
+
+// In-memory download state, polled by the piece page.
+// pieceId -> { state: 'running'|'done'|'error', message, filePath }
+export const importStatus = new Map();
+
+export function getImportStatus(pieceId) {
+  return importStatus.get(Number(pieceId)) || null;
+}
+
+// Guards double-submits of the same URL while its metadata fetch is running.
+const inFlightUrls = new Set();
+export function isImporting(url) {
+  return inFlightUrls.has(url);
+}
+export function markImporting(url) {
+  inFlightUrls.add(url);
+}
+export function unmarkImporting(url) {
+  inFlightUrls.delete(url);
+}
+
+// Download the video to ~/Downloads in the background and attach it to the
+// piece as a media asset. Fire-and-forget; the UI polls importStatus.
+export function startDownload(pieceId, url, { usedCookies = false } = {}) {
+  const id = Number(pieceId);
+  importStatus.set(id, { state: 'running', message: 'Downloading video to ~/Downloads…' });
+  runDownload(id, url, usedCookies).catch((err) => {
+    importStatus.set(id, {
+      state: 'error',
+      message: `Download failed (${firstErrorLine(err)}). You can add the file manually with the form below.`,
+    });
+  });
+}
+
+async function runDownload(id, url, usedCookies) {
+  const outTemplate = path.join(os.homedir(), 'Downloads', '%(title).60B [%(id)s].%(ext)s');
+  const args = [
+    '--no-playlist',
+    '-f', 'b[ext=mp4]/b', // best pre-merged single file: no ffmpeg merge needed
+    '-o', outTemplate,
+    '--no-overwrites',
+    '--no-simulate',
+    '--print', 'after_move:filepath',
+  ];
+  if (usedCookies) args.push('--cookies', cookiesFile);
+  args.push(url);
+
+  const { stdout } = await execFileAsync(ytdlpPath(), args, { timeout: 600000, maxBuffer: 20 * 1024 * 1024 });
+  const filePath = stdout.trim().split('\n').pop();
+  if (!filePath || !fs.existsSync(filePath)) {
+    throw new Error('yt-dlp finished but did not report a downloaded file');
+  }
+
+  const meta = await probe(filePath);
+  db.prepare(
+    `INSERT INTO media_assets (content_piece_id, file_path, kind, width, height, duration_sec, size_bytes, role)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, filePath, meta.kind, meta.width, meta.height, meta.duration_sec, meta.size_bytes, 'primary');
+  importStatus.set(id, { state: 'done', message: `Video saved to ${filePath} and attached.`, filePath });
+}

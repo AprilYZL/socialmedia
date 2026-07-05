@@ -122,7 +122,7 @@ th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
   gap: 1rem;
 }
 .variant-card h3 { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-.variant-actions { margin-top: 0.7rem; }
+.variant-actions { margin-top: 0.7rem; flex-wrap: wrap; }
 
 .staging-status { min-height: 1.2rem; margin-top: 0.4rem; font-size: 0.85rem; }
 .staging-running { color: var(--accent-2); }

@@ -2,7 +2,7 @@ import { db, getSetting } from '../db/index.js';
 import { config } from '../config.js';
 import { composeText, parseHashtags } from '../services/compose.js';
 import { pbcopy } from '../services/clipboard.js';
-import { launchProfile, getPage } from './baseUploader.js';
+import { launchProfile, getPage, snapshotCookies } from './baseUploader.js';
 import bilibili from './bilibili.js';
 import douyin from './douyin.js';
 import xiaohongshu from './xiaohongshu.js';
@@ -110,6 +110,7 @@ async function runStage(id, variant, { videoPath, imagePaths }) {
       state: 'done',
       message: 'Staged. Review the browser window, wait for the upload to finish, and click Publish yourself.',
     });
+    await snapshotCookies(variant.platform_id);
   } catch (err) {
     // Graceful degradation: leave the upload page open, put the composed
     // caption on the clipboard, and tell the user to paste manually.

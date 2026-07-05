@@ -4,6 +4,15 @@ import { db } from '../db/index.js';
 import { probe, checkConstraints } from '../services/media.js';
 import { composeText } from '../services/compose.js';
 import { getStagingStatus } from '../uploaders/index.js';
+import {
+  normalizeUrl,
+  fetchMetadata,
+  startDownload,
+  getImportStatus,
+  isImporting,
+  markImporting,
+  unmarkImporting,
+} from '../services/importer.js';
 
 export const contentRouter = Router();
 
@@ -29,6 +38,65 @@ contentRouter.post('/library', (req, res) => {
     .prepare('INSERT INTO content_pieces (title, content_type, master_description) VALUES (?, ?, ?)')
     .run(title.trim(), type, master_description || '');
   res.redirect(`/piece/${info.lastInsertRowid}`);
+});
+
+function findBySourceUrl(url) {
+  return db.prepare('SELECT id FROM content_pieces WHERE source_url = ?').get(url);
+}
+
+function redirectToExisting(res, row) {
+  res.redirect(`/piece/${row.id}?msg=` + encodeURIComponent('Already imported — this URL matches this piece.'));
+}
+
+contentRouter.post('/library/import', async (req, res) => {
+  let url;
+  try {
+    url = normalizeUrl(req.body.url);
+  } catch (err) {
+    return res.redirect('/library?err=' + encodeURIComponent(err.message));
+  }
+
+  const existing = findBySourceUrl(url);
+  if (existing) return redirectToExisting(res, existing);
+  if (isImporting(url)) {
+    return res.redirect('/library?err=' + encodeURIComponent('That URL is already being imported — give it a moment.'));
+  }
+
+  markImporting(url);
+  try {
+    const meta = await fetchMetadata(url);
+
+    // Second pass: short links resolve to a canonical URL we may already have
+    const dup = findBySourceUrl(meta.canonicalUrl);
+    if (dup) return redirectToExisting(res, dup);
+
+    let info;
+    try {
+      info = db
+        .prepare('INSERT INTO content_pieces (title, content_type, master_description, source_url) VALUES (?, ?, ?, ?)')
+        .run(meta.title, 'short_video', meta.description, meta.canonicalUrl);
+    } catch (err) {
+      if (String(err.code || '').startsWith('SQLITE_CONSTRAINT')) {
+        const race = findBySourceUrl(meta.canonicalUrl);
+        if (race) return redirectToExisting(res, race);
+      }
+      throw err;
+    }
+
+    startDownload(info.lastInsertRowid, meta.canonicalUrl, meta);
+    res.redirect(
+      `/piece/${info.lastInsertRowid}?msg=` +
+        encodeURIComponent('Imported — video download to ~/Downloads is running in the background.')
+    );
+  } catch (err) {
+    res.redirect('/library?err=' + encodeURIComponent(String(err.message || err)));
+  } finally {
+    unmarkImporting(url);
+  }
+});
+
+contentRouter.get('/piece/:id/import-status', (req, res) => {
+  res.json({ importing: getImportStatus(req.params.id) });
 });
 
 contentRouter.get('/piece/:id', (req, res) => {
@@ -73,6 +141,7 @@ contentRouter.get('/piece/:id', (req, res) => {
     cards,
     namedGroups,
     contentTypes: CONTENT_TYPES,
+    importStatus: getImportStatus(piece.id),
     msg: req.query.msg,
     err: req.query.err,
   });
