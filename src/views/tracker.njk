@@ -15,8 +15,14 @@
   </thead>
   <tbody>
     {% for piece in pieces %}
+    {% set acct = accountsById[piece.account_id] %}
     <tr>
-      <td><a href="/piece/{{ piece.id }}">{{ piece.title }}</a></td>
+      <td>
+        <a href="/piece/{{ piece.id }}">{{ piece.title }}</a>
+        {% if activeAccount == 'all' and acct %}
+          <span class="badge badge-account" style="--acct: {{ acct.color }}">{{ acct.display_name }}</span>
+        {% endif %}
+      </td>
       <td class="muted">{{ piece.content_type | replace("_", " ") }}</td>
       {% for p in platforms %}
         {% set v = byPiece[piece.id][p.id] if byPiece[piece.id] else null %}
@@ -24,6 +30,8 @@
           {% if v %}
             <span class="badge status-{{ v.status }}">{{ v.status }}</span>
             {% if v.live_url %}<a href="{{ v.live_url }}" target="_blank" title="open live post">🔗</a>{% endif %}
+          {% elif not enabledMap[piece.account_id][p.id] %}
+            <span class="muted" title="{{ p.display_name }} is disabled for {{ acct.display_name }}">·</span>
           {% else %}
             <span class="muted">—</span>
           {% endif %}

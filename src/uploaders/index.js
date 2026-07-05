@@ -24,12 +24,14 @@ export function getStagingStatus(variantId) {
   return stagingStatus.get(Number(variantId)) || null;
 }
 
-// Open the platform's home page in its persistent profile so the user can
-// log in (QR code for CN platforms). Fire-and-forget.
-export async function openLoginWindow(platformId) {
+// Open the platform's home page in the account's persistent profile so the
+// user can log in (QR code for CN platforms). Fire-and-forget.
+export async function openLoginWindow(platformId, accountId) {
   const platform = db.prepare('SELECT * FROM platforms WHERE id = ?').get(platformId);
   if (!platform) throw new Error(`unknown platform: ${platformId}`);
-  const ctx = await launchProfile(platformId);
+  const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId);
+  if (!account) throw new Error(`unknown account: ${accountId}`);
+  const ctx = await launchProfile(platformId, accountId);
   const page = await getPage(ctx);
   await page.goto(platform.home_url, { waitUntil: 'domcontentloaded' }).catch(() => {});
 }
@@ -47,8 +49,10 @@ export function stageVariant(variantId) {
 
   const variant = db
     .prepare(
-      `SELECT v.*, p.upload_url, p.display_name AS platform_name
-       FROM platform_variants v JOIN platforms p ON p.id = v.platform_id
+      `SELECT v.*, p.upload_url, p.display_name AS platform_name, cp.account_id
+       FROM platform_variants v
+       JOIN platforms p ON p.id = v.platform_id
+       JOIN content_pieces cp ON cp.id = v.content_piece_id
        WHERE v.id = ?`
     )
     .get(id);
@@ -79,7 +83,7 @@ async function runStage(id, variant, { videoPath, imagePaths }) {
   const hashtags = parseHashtags(variant.hashtags);
   const composed = composeText(variant);
 
-  const ctx = await launchProfile(variant.platform_id);
+  const ctx = await launchProfile(variant.platform_id, variant.account_id);
   const page = await getPage(ctx);
 
   try {
@@ -110,7 +114,7 @@ async function runStage(id, variant, { videoPath, imagePaths }) {
       state: 'done',
       message: 'Staged. Review the browser window, wait for the upload to finish, and click Publish yourself.',
     });
-    await snapshotCookies(variant.platform_id);
+    await snapshotCookies(variant.platform_id, variant.account_id);
   } catch (err) {
     // Graceful degradation: leave the upload page open, put the composed
     // caption on the clipboard, and tell the user to paste manually.

@@ -18,6 +18,15 @@ const pieceCols = db.prepare('PRAGMA table_info(content_pieces)').all().map((c) 
 if (pieceCols.length && !pieceCols.includes('source_url')) {
   db.exec('ALTER TABLE content_pieces ADD COLUMN source_url TEXT');
 }
+if (pieceCols.length && !pieceCols.includes('account_id')) {
+  // No REFERENCES clause here: SQLite rejects ADD COLUMN with both a foreign
+  // key and a non-NULL default while foreign_keys is ON. Fresh databases get
+  // the FK from schema.sql instead.
+  db.exec("ALTER TABLE content_pieces ADD COLUMN account_id TEXT NOT NULL DEFAULT 'frenchtouch'");
+  // Pre-account pieces were all Justice videos; must stay inside this
+  // column-missing branch so it never reruns on later boots.
+  db.exec("UPDATE content_pieces SET account_id = 'justicecn'");
+}
 
 const schema = fs.readFileSync(path.join(config.root, 'src', 'db', 'schema.sql'), 'utf8');
 db.exec(schema);

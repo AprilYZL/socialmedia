@@ -40,7 +40,9 @@
         {% if day %}
         <div class="cal-day"><a href="/calendar?month={{ monthLabel }}&date={{ day }}" title="mark a post published on {{ day }}">{{ day.slice(8) }}</a></div>
         {% for post in postsByDate[day] %}
+        {% set acct = accountsById[post.account_id] %}
         <div class="cal-slot">
+          {% if acct %}<span class="acct-dot" style="--acct: {{ acct.color }}" title="{{ acct.display_name }}"></span>{% endif %}
           <a href="/piece/{{ post.piece_id }}">{{ post.piece_title | truncate(18) }}</a>
           <span class="muted small">{{ post.platform_name }}</span>
           {% if post.live_url %}<a href="{{ post.live_url }}" target="_blank" rel="noopener" title="open live post">🔗</a>{% endif %}

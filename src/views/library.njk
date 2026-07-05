@@ -7,6 +7,13 @@
   <h2>New content piece</h2>
   <form method="post" action="/library" class="stack">
     <label>Working title <input name="title" required placeholder="e.g. Justice – Hyperdrama live clip, Shanghai reaction"></label>
+    <label>Account
+      <select name="account_id">
+        {% for a in accounts %}
+        <option value="{{ a.id }}" {% if a.id == activeAccount %}selected{% endif %}>{{ a.display_name }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>Type
       <select name="content_type">
         {% for t in contentTypes %}<option value="{{ t }}">{{ t | replace("_", " ") }}</option>{% endfor %}
@@ -23,6 +30,11 @@
   <h2>Import from TikTok / Instagram URL</h2>
   <form method="post" action="/library/import" class="row">
     <input name="url" class="grow" required placeholder="https://www.tiktok.com/@user/video/… or https://www.instagram.com/reel/…">
+    <select name="account_id">
+      {% for a in accounts %}
+      <option value="{{ a.id }}" {% if a.id == activeAccount %}selected{% endif %}>{{ a.display_name }}</option>
+      {% endfor %}
+    </select>
     <button class="btn-primary" onclick="this.textContent='Importing…'">Import</button>
   </form>
   <p class="muted small">Fetches the title + description and downloads the video to ~/Downloads. Already-imported URLs jump to their existing piece instead of creating a duplicate.</p>
@@ -32,14 +44,16 @@
 {% if pieces.length %}
 <div class="table-scroll">
 <table>
-  <thead><tr><th>Title</th><th>Type</th><th>Media</th><th>Variants</th><th>Created</th><th></th></tr></thead>
+  <thead><tr><th>Title</th><th>Account</th><th>Type</th><th>Media</th><th>Variants</th><th>Created</th><th></th></tr></thead>
   <tbody>
     {% for p in pieces %}
+    {% set acct = accountsById[p.account_id] %}
     <tr>
       <td><a href="/piece/{{ p.id }}">{{ p.title }}</a></td>
+      <td>{% if acct %}<span class="badge badge-account" style="--acct: {{ acct.color }}">{{ acct.display_name }}</span>{% endif %}</td>
       <td class="muted">{{ p.content_type | replace("_", " ") }}</td>
       <td>{{ p.media_count }}</td>
-      <td>{{ p.variant_count }}/6</td>
+      <td>{{ p.variant_count }}/{{ p.enabled_count }}</td>
       <td class="muted">{{ p.created_at }}</td>
       <td>
         <form method="post" action="/piece/{{ p.id }}/archive" onsubmit="return confirm('Archive this piece?')">

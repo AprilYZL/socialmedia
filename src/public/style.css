@@ -34,6 +34,19 @@ body {
 .nav .brand { font-weight: 700; color: var(--accent); margin-right: 1rem; }
 .nav a { color: var(--text); text-decoration: none; }
 .nav a:hover { color: var(--accent); }
+.nav .switcher { margin-left: auto; display: flex; gap: 0.4rem; align-items: center; }
+
+.btn-switch {
+  --acct: var(--muted);
+  padding: 0.2rem 0.8rem;
+  border-radius: 99px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.btn-switch:hover { border-color: var(--acct); color: var(--acct); }
+.btn-switch.active { border-color: var(--acct); color: var(--acct); background: color-mix(in srgb, var(--acct) 12%, transparent); }
+
+.badge-account { border-color: var(--acct, var(--border)); color: var(--acct, var(--text)); }
 
 .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
 
@@ -156,6 +169,7 @@ th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
 .cal-today { outline: 2px solid var(--accent); border-radius: 4px; }
 .cal-day { color: var(--muted); font-size: 0.8rem; }
 .cal-slot { background: #26262f; border-radius: 6px; padding: 0.2rem 0.4rem; margin-top: 0.25rem; font-size: 0.8rem; }
+.acct-dot { display: inline-block; width: 0.55em; height: 0.55em; border-radius: 50%; background: var(--acct, var(--muted)); }
 .cal-done { opacity: 0.45; text-decoration: line-through; }
 
 .due-today { border-color: var(--accent); }

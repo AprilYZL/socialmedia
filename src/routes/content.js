@@ -13,20 +13,33 @@ import {
   markImporting,
   unmarkImporting,
 } from '../services/importer.js';
+import { getActiveAccount, getEnabledPlatforms, isAccountId } from '../services/accounts.js';
 
 export const contentRouter = Router();
 
 const CONTENT_TYPES = ['short_video', 'long_video', 'article', 'poster'];
 
+// Account a new piece belongs to: the form's choice, else the switcher's.
+function resolveAccountId(requested) {
+  if (requested && isAccountId(requested)) return requested;
+  const active = getActiveAccount();
+  return active !== 'all' ? active : 'frenchtouch';
+}
+
 contentRouter.get('/library', (req, res) => {
+  const active = getActiveAccount();
   const pieces = db
     .prepare(
       `SELECT cp.*,
               (SELECT COUNT(*) FROM media_assets ma WHERE ma.content_piece_id = cp.id) AS media_count,
-              (SELECT COUNT(*) FROM platform_variants v WHERE v.content_piece_id = cp.id) AS variant_count
-       FROM content_pieces cp WHERE cp.archived = 0 ORDER BY cp.created_at DESC`
+              (SELECT COUNT(*) FROM platform_variants v WHERE v.content_piece_id = cp.id) AS variant_count,
+              (SELECT COUNT(*) FROM account_platforms ap JOIN platforms p ON p.id = ap.platform_id
+               WHERE ap.account_id = cp.account_id AND ap.enabled = 1 AND p.enabled = 1) AS enabled_count
+       FROM content_pieces cp WHERE cp.archived = 0
+       ${active === 'all' ? '' : 'AND cp.account_id = @account'}
+       ORDER BY cp.created_at DESC`
     )
-    .all();
+    .all(active === 'all' ? {} : { account: active });
   res.render('library.njk', { pieces, contentTypes: CONTENT_TYPES, msg: req.query.msg, err: req.query.err });
 });
 
@@ -35,8 +48,8 @@ contentRouter.post('/library', (req, res) => {
   if (!title?.trim()) return res.redirect('/library?err=' + encodeURIComponent('Title is required'));
   const type = CONTENT_TYPES.includes(content_type) ? content_type : 'short_video';
   const info = db
-    .prepare('INSERT INTO content_pieces (title, content_type, master_description) VALUES (?, ?, ?)')
-    .run(title.trim(), type, master_description || '');
+    .prepare('INSERT INTO content_pieces (title, content_type, master_description, account_id) VALUES (?, ?, ?, ?)')
+    .run(title.trim(), type, master_description || '', resolveAccountId(req.body.account_id));
   res.redirect(`/piece/${info.lastInsertRowid}`);
 });
 
@@ -63,8 +76,9 @@ contentRouter.post('/library/import', async (req, res) => {
   }
 
   markImporting(url);
+  const accountId = resolveAccountId(req.body.account_id);
   try {
-    const meta = await fetchMetadata(url);
+    const meta = await fetchMetadata(url, accountId);
 
     // Second pass: short links resolve to a canonical URL we may already have
     const dup = findBySourceUrl(meta.canonicalUrl);
@@ -73,8 +87,10 @@ contentRouter.post('/library/import', async (req, res) => {
     let info;
     try {
       info = db
-        .prepare('INSERT INTO content_pieces (title, content_type, master_description, source_url) VALUES (?, ?, ?, ?)')
-        .run(meta.title, 'short_video', meta.description, meta.canonicalUrl);
+        .prepare(
+          'INSERT INTO content_pieces (title, content_type, master_description, source_url, account_id) VALUES (?, ?, ?, ?, ?)'
+        )
+        .run(meta.title, 'short_video', meta.description, meta.canonicalUrl, accountId);
     } catch (err) {
       if (String(err.code || '').startsWith('SQLITE_CONSTRAINT')) {
         const race = findBySourceUrl(meta.canonicalUrl);
@@ -104,9 +120,16 @@ contentRouter.get('/piece/:id', (req, res) => {
   if (!piece) return res.status(404).send('Not found');
 
   const assets = db.prepare('SELECT * FROM media_assets WHERE content_piece_id = ? ORDER BY id').all(piece.id);
-  const platforms = db.prepare('SELECT * FROM platforms WHERE enabled = 1 ORDER BY sort_order').all();
   const variants = db.prepare('SELECT * FROM platform_variants WHERE content_piece_id = ?').all(piece.id);
   const variantsByPlatform = Object.fromEntries(variants.map((v) => [v.platform_id, v]));
+
+  // Platforms enabled for this piece's account, plus any platform that already
+  // has a variant — existing drafts must stay visible after account/toggle changes.
+  const enabledIds = new Set(getEnabledPlatforms(piece.account_id).map((p) => p.id));
+  const platforms = db
+    .prepare('SELECT * FROM platforms ORDER BY sort_order')
+    .all()
+    .filter((p) => enabledIds.has(p.id) || variantsByPlatform[p.id]);
 
   const allGroups = db.prepare('SELECT * FROM hashtag_groups ORDER BY sort_order, id').all();
   const defaultTagsByPlatform = Object.fromEntries(
@@ -148,11 +171,14 @@ contentRouter.get('/piece/:id', (req, res) => {
 });
 
 contentRouter.post('/piece/:id', (req, res) => {
-  const { title, content_type, master_description } = req.body;
-  db.prepare('UPDATE content_pieces SET title = ?, content_type = ?, master_description = ? WHERE id = ?').run(
+  const { title, content_type, master_description, account_id } = req.body;
+  db.prepare(
+    'UPDATE content_pieces SET title = ?, content_type = ?, master_description = ?, account_id = COALESCE(?, account_id) WHERE id = ?'
+  ).run(
     title?.trim() || 'Untitled',
     CONTENT_TYPES.includes(content_type) ? content_type : 'short_video',
     master_description || '',
+    isAccountId(account_id) ? account_id : null,
     req.params.id
   );
   res.redirect(`/piece/${req.params.id}?msg=` + encodeURIComponent('Saved'));

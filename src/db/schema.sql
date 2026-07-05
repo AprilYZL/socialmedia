@@ -1,3 +1,17 @@
+CREATE TABLE IF NOT EXISTS accounts (
+  id TEXT PRIMARY KEY,              -- 'frenchtouch' | 'justicecn'
+  display_name TEXT NOT NULL,
+  color TEXT,                       -- badge/switcher accent color
+  sort_order INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS account_platforms (
+  account_id TEXT NOT NULL REFERENCES accounts(id),
+  platform_id TEXT NOT NULL REFERENCES platforms(id),
+  enabled INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (account_id, platform_id)
+);
+
 CREATE TABLE IF NOT EXISTS platforms (
   id TEXT PRIMARY KEY,              -- 'bilibili' | 'xiaohongshu' | 'douyin' | 'instagram' | 'tiktok' | 'youtube'
   display_name TEXT NOT NULL,
@@ -16,6 +30,7 @@ CREATE TABLE IF NOT EXISTS content_pieces (
   language TEXT DEFAULT 'zh',
   tags TEXT,                        -- JSON array, internal organization
   source_url TEXT,                  -- normalized origin URL for imported pieces; NULL if created manually
+  account_id TEXT NOT NULL DEFAULT 'frenchtouch' REFERENCES accounts(id),
   created_at TEXT DEFAULT (datetime('now')),
   archived INTEGER NOT NULL DEFAULT 0
 );

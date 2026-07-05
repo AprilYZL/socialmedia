@@ -2,7 +2,11 @@
 {% block title %}{{ piece.title }}{% endblock %}
 {% block content %}
 <p><a href="/library">← Library</a></p>
-<h1>{{ piece.title }}</h1>
+<h1>
+  {{ piece.title }}
+  {% set acct = accountsById[piece.account_id] %}
+  {% if acct %}<span class="badge badge-account" style="--acct: {{ acct.color }}">{{ acct.display_name }}</span>{% endif %}
+</h1>
 {% if piece.source_url %}
 <p class="muted small">Imported from <a href="{{ piece.source_url }}" target="_blank" rel="noopener">{{ piece.source_url }}</a></p>
 {% endif %}
@@ -11,6 +15,13 @@
   <h2>Master content</h2>
   <form method="post" action="/piece/{{ piece.id }}" class="stack">
     <label>Working title <input name="title" value="{{ piece.title }}" required></label>
+    <label>Account
+      <select name="account_id">
+        {% for a in accounts %}
+        <option value="{{ a.id }}" {% if a.id == piece.account_id %}selected{% endif %}>{{ a.display_name }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>Type
       <select name="content_type">
         {% for t in contentTypes %}

@@ -4,6 +4,7 @@ import nunjucks from 'nunjucks';
 import { config } from './config.js';
 import { closeAllProfiles } from './uploaders/baseUploader.js';
 import './db/index.js';
+import { accountRouter } from './routes/account.js';
 import { trackerRouter } from './routes/tracker.js';
 import { contentRouter } from './routes/content.js';
 import { variantsRouter } from './routes/variants.js';
@@ -19,6 +20,8 @@ app.set('view engine', 'njk');
 app.use(express.urlencoded({ extended: true }));
 app.use('/static', express.static(config.publicDir));
 
+// Account middleware feeds the nav switcher on every page — keep it first.
+app.use(accountRouter);
 app.use(trackerRouter);
 app.use(contentRouter);
 app.use(variantsRouter);

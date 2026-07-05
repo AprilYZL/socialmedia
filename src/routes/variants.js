@@ -4,6 +4,7 @@ import { generateVariants } from '../services/ai/generateVariants.js';
 import { checkSensitiveWords } from '../services/ai/sensitiveWords.js';
 import { parseHashtags } from '../services/compose.js';
 import { fillFromMaster } from '../services/templates.js';
+import { getEnabledPlatforms } from '../services/accounts.js';
 
 export const variantsRouter = Router();
 
@@ -33,6 +34,9 @@ variantsRouter.post('/piece/:id/generate', async (req, res) => {
 
   let platformIds = req.body.platforms || [];
   if (typeof platformIds === 'string') platformIds = [platformIds];
+  // Guard against stale forms: only generate for platforms this piece's account is on
+  const allowed = new Set(getEnabledPlatforms(piece.account_id).map((p) => p.id));
+  platformIds = platformIds.filter((id) => allowed.has(id));
   if (!platformIds.length) {
     return res.redirect(`/piece/${pieceId}?err=` + encodeURIComponent('Select at least one platform to generate.'));
   }

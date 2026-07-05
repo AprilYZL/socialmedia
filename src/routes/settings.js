@@ -5,14 +5,20 @@ import { db, getSetting, setSetting } from '../db/index.js';
 import { config } from '../config.js';
 import { openLoginWindow } from '../uploaders/index.js';
 import { parseHashtags } from '../services/compose.js';
+import { isAccountId } from '../services/accounts.js';
 
 export const settingsRouter = Router();
 
 settingsRouter.get('/settings', (req, res) => {
-  const platforms = db.prepare('SELECT * FROM platforms ORDER BY sort_order').all().map((p) => ({
-    ...p,
-    hasProfile: fs.existsSync(path.join(config.profilesDir, p.id, 'Default')),
-  }));
+  const platforms = db.prepare('SELECT * FROM platforms ORDER BY sort_order').all();
+  // { accountId: { platformId: { enabled, hasProfile } } } for the login matrix
+  const accountRows = {};
+  for (const ap of db.prepare('SELECT * FROM account_platforms').all()) {
+    (accountRows[ap.account_id] ??= {})[ap.platform_id] = {
+      enabled: ap.enabled,
+      hasProfile: fs.existsSync(path.join(config.profilesDir, ap.account_id, ap.platform_id, 'Default')),
+    };
+  }
   const apiKey = getSetting('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '';
 
   const templates = Object.fromEntries(
@@ -28,6 +34,7 @@ settingsRouter.get('/settings', (req, res) => {
 
   res.render('settings.njk', {
     platforms,
+    accountRows,
     maskedKey: apiKey ? `${apiKey.slice(0, 10)}…${apiKey.slice(-4)}` : '',
     model: getSetting('model') || config.defaultModel,
     throttle: getSetting('throttle_seconds') || config.defaultThrottleSeconds,
@@ -107,9 +114,21 @@ settingsRouter.post('/settings/platform/:id/toggle', (req, res) => {
   res.redirect('/settings');
 });
 
-settingsRouter.post('/settings/login/:id', async (req, res) => {
+// Whether an account exists on a platform (e.g. JusticeCN might have no YouTube).
+settingsRouter.post('/settings/account-platform/:accountId/:platformId/toggle', (req, res) => {
+  db.prepare('UPDATE account_platforms SET enabled = 1 - enabled WHERE account_id = ? AND platform_id = ?').run(
+    req.params.accountId,
+    req.params.platformId
+  );
+  res.redirect('/settings');
+});
+
+settingsRouter.post('/settings/login/:platformId/:accountId', async (req, res) => {
+  if (!isAccountId(req.params.accountId)) {
+    return res.redirect('/settings?err=' + encodeURIComponent('Unknown account.'));
+  }
   try {
-    await openLoginWindow(req.params.id);
+    await openLoginWindow(req.params.platformId, req.params.accountId);
     res.redirect('/settings?msg=' + encodeURIComponent('Login window opened — scan the QR code or sign in, then just close the window.'));
   } catch (err) {
     res.redirect('/settings?err=' + encodeURIComponent(err.message));

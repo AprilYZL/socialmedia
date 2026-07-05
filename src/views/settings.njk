@@ -72,26 +72,42 @@
 </section>
 
 <section class="card">
-  <h2>Platform logins</h2>
-  <p class="muted">Each platform gets its own persistent browser profile, so you only log in once (QR code for the Chinese platforms). Click a button, sign in in the window that opens, then simply close it.</p>
+  <h2>Accounts &amp; platform logins</h2>
+  <p class="muted">Each account gets its own persistent browser profile per platform, so you only log in once per combination (QR code for the Chinese platforms). Click a login button, sign in in the window that opens, then simply close it. The per-account toggle marks whether that account exists on the platform — disabled combinations disappear from that account's draft cards and pickers.</p>
   <div class="table-scroll">
   <table>
-    <thead><tr><th>Platform</th><th>Enabled</th><th>Profile</th><th></th></tr></thead>
+    <thead>
+      <tr>
+        <th>Platform</th>
+        <th>Enabled</th>
+        {% for a in accounts %}
+        <th><span class="badge badge-account" style="--acct: {{ a.color }}">{{ a.display_name }}</span></th>
+        {% endfor %}
+      </tr>
+    </thead>
     <tbody>
       {% for p in platforms %}
       <tr>
         <td>{{ p.display_name }}</td>
         <td>
           <form class="inline" method="post" action="/settings/platform/{{ p.id }}/toggle">
-            <button class="btn-small">{{ "✅ on" if p.enabled else "⬜ off" }}</button>
+            <button class="btn-small" title="global on/off for this platform">{{ "✅ on" if p.enabled else "⬜ off" }}</button>
           </form>
         </td>
-        <td class="muted">{{ "profile exists" if p.hasProfile else "not logged in yet" }}</td>
+        {% for a in accounts %}
+        {% set ap = accountRows[a.id][p.id] %}
         <td>
-          <form class="inline" method="post" action="/settings/login/{{ p.id }}">
-            <button class="btn-small">Open login window</button>
-          </form>
+          <div class="row wrap">
+            <form class="inline" method="post" action="/settings/account-platform/{{ a.id }}/{{ p.id }}/toggle">
+              <button class="btn-small" title="does {{ a.display_name }} exist on {{ p.display_name }}?">{{ "✅ on" if ap.enabled else "⬜ off" }}</button>
+            </form>
+            <span class="muted small">{{ "profile exists" if ap.hasProfile else "not logged in" }}</span>
+            <form class="inline" method="post" action="/settings/login/{{ p.id }}/{{ a.id }}">
+              <button class="btn-small">Log in</button>
+            </form>
+          </div>
         </td>
+        {% endfor %}
       </tr>
       {% endfor %}
     </tbody>

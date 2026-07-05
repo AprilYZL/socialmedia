@@ -1,3 +1,10 @@
+// The two real social media accounts, each existing on (a subset of) the
+// platforms below. Which platform×account combos exist is toggled in Settings.
+const ACCOUNTS = [
+  { id: 'frenchtouch', display_name: 'French Touch', color: '#7aa2ff', sort_order: 1 },
+  { id: 'justicecn', display_name: 'JusticeCN', color: '#e0b34c', sort_order: 2 },
+];
+
 // Platform registry. Constraint values are approximate platform rules used for
 // pre-upload warnings only — verify against each platform's current docs.
 const PLATFORMS = [
@@ -64,6 +71,25 @@ export function seed(db) {
   `);
   for (const p of PLATFORMS) {
     insert.run({ ...p, constraints: JSON.stringify(p.constraints) });
+  }
+
+  const insertAccount = db.prepare(`
+    INSERT INTO accounts (id, display_name, color, sort_order)
+    VALUES (@id, @display_name, @color, @sort_order)
+    ON CONFLICT(id) DO UPDATE SET
+      display_name = excluded.display_name,
+      color = excluded.color,
+      sort_order = excluded.sort_order
+  `);
+  // OR IGNORE so enable/disable toggles set in Settings survive restarts
+  const insertAccountPlatform = db.prepare(
+    'INSERT OR IGNORE INTO account_platforms (account_id, platform_id, enabled) VALUES (?, ?, 1)'
+  );
+  for (const a of ACCOUNTS) {
+    insertAccount.run(a);
+    for (const p of PLATFORMS) {
+      insertAccountPlatform.run(a.id, p.id);
+    }
   }
 
   // Starter hashtag groups so the chips UI isn't empty on first run

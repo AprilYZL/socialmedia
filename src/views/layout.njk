@@ -13,6 +13,16 @@
     <a href="/library">Library</a>
     <a href="/calendar">Calendar</a>
     <a href="/settings">Settings</a>
+    <span class="switcher">
+      {% for a in accounts %}
+        <form method="post" action="/account/{{ a.id }}" class="inline">
+          <button class="btn-switch{% if activeAccount == a.id %} active{% endif %}" style="--acct: {{ a.color }}">{{ a.display_name }}</button>
+        </form>
+      {% endfor %}
+      <form method="post" action="/account/all" class="inline">
+        <button class="btn-switch{% if activeAccount == 'all' %} active{% endif %}">All</button>
+      </form>
+    </span>
   </nav>
 
   <main class="container">

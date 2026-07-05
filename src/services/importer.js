@@ -53,8 +53,8 @@ function firstErrorLine(err) {
 }
 
 // Fetch title/description without downloading. On an auth-walled Instagram
-// post, export cookies from the app's logged-in Playwright profile and retry.
-export async function fetchMetadata(url) {
+// post, export cookies from the account's logged-in Playwright profile and retry.
+export async function fetchMetadata(url, accountId = 'frenchtouch') {
   const baseArgs = ['--dump-single-json', '--no-download', '--no-playlist', '--socket-timeout', '15'];
   const opts = { timeout: 60000, maxBuffer: 20 * 1024 * 1024 };
   let usedCookies = false;
@@ -69,7 +69,7 @@ export async function fetchMetadata(url) {
     if (!(authWalled && url.includes('instagram.com'))) {
       throw new Error(firstErrorLine(err));
     }
-    await exportInstagramCookies();
+    await exportInstagramCookies(accountId);
     usedCookies = true;
     try {
       ({ stdout } = await execFileAsync(ytdlpPath(), [...baseArgs, '--cookies', cookiesFile, url], opts));
@@ -99,8 +99,8 @@ export async function fetchMetadata(url) {
 // Write the Playwright profile's Instagram cookies as a Netscape cookies.txt
 // that yt-dlp can read. --cookies-from-browser can't be used: Playwright's
 // Chromium encrypts its cookie store with a mock keychain on macOS.
-async function exportInstagramCookies() {
-  const ctx = await launchProfile('instagram');
+async function exportInstagramCookies(accountId) {
+  const ctx = await launchProfile('instagram', accountId);
   const cookies = await ctx.cookies(['https://www.instagram.com', 'https://instagram.com']);
   if (!cookies.some((c) => c.name === 'sessionid' && c.value)) {
     const page = await getPage(ctx);

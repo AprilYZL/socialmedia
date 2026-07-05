@@ -15,6 +15,15 @@ Sensitive-word check (for bilibili / xiaohongshu / douyin drafts only): flag any
 
 Return one variant per requested platform, no more, no less.`;
 
+// Which of the two real accounts this piece posts from, so drafts match the
+// account's editorial identity.
+const ACCOUNT_CONTEXT = {
+  frenchtouch:
+    'Posting account: French Touch — covers the whole French touch / French house scene EXCEPT Justice-specific content. Write as a broad scene curator.',
+  justicecn:
+    'Posting account: JusticeCN — a fan account dedicated to Justice (the French electronic duo). Write as a Justice specialist for Justice fans; center Justice in every draft.',
+};
+
 export function buildUserPrompt(piece, assets, platformIds) {
   const mediaLines = assets.map((a) => {
     const dims = a.width && a.height ? `${a.width}x${a.height}` : 'unknown size';
@@ -23,6 +32,7 @@ export function buildUserPrompt(piece, assets, platformIds) {
   });
 
   return [
+    ACCOUNT_CONTEXT[piece.account_id],
     `Content type: ${piece.content_type}`,
     `Internal title: ${piece.title}`,
     `Master description (source of truth):\n${piece.master_description || '(none provided — work from the title)'}`,

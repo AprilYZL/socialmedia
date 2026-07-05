@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
+import { getActiveAccount, getEnabledMap } from '../services/accounts.js';
 
 export const calendarRouter = Router();
 
@@ -28,18 +29,22 @@ calendarRouter.get('/calendar', (req, res) => {
     .map(Number);
   const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
 
+  const active = getActiveAccount();
+  const accountFilter = active === 'all' ? '' : 'AND cp.account_id = @account';
+  const filterParams = active === 'all' ? {} : { account: active };
+
   // Archived pieces included: this is history, not a work queue
   const posts = db
     .prepare(
       `SELECT v.id AS variant_id, substr(v.posted_at, 1, 10) AS posted_date, v.live_url,
-              cp.id AS piece_id, cp.title AS piece_title, p.display_name AS platform_name
+              cp.id AS piece_id, cp.title AS piece_title, cp.account_id, p.display_name AS platform_name
        FROM platform_variants v
        JOIN content_pieces cp ON cp.id = v.content_piece_id
        JOIN platforms p ON p.id = v.platform_id
-       WHERE v.status = 'posted' AND v.posted_at LIKE ?
+       WHERE v.status = 'posted' AND v.posted_at LIKE @month ${accountFilter}
        ORDER BY v.posted_at`
     )
-    .all(`${monthPrefix}-%`);
+    .all({ month: `${monthPrefix}-%`, ...filterParams });
 
   const postsByDate = {};
   for (const p of posts) (postsByDate[p.posted_date] ??= []).push(p);
@@ -47,7 +52,9 @@ calendarRouter.get('/calendar', (req, res) => {
   // Every not-yet-posted piece × platform combo is markable — a draft variant
   // doesn't need to exist yet.
   const platforms = db.prepare('SELECT * FROM platforms WHERE enabled = 1 ORDER BY sort_order').all();
-  const pieces = db.prepare('SELECT * FROM content_pieces WHERE archived = 0 ORDER BY created_at DESC').all();
+  const pieces = db
+    .prepare(`SELECT * FROM content_pieces cp WHERE archived = 0 ${accountFilter} ORDER BY created_at DESC`)
+    .all(filterParams);
   const variants = db.prepare('SELECT * FROM platform_variants').all();
   const byPiece = {};
   for (const v of variants) {
@@ -55,10 +62,14 @@ calendarRouter.get('/calendar', (req, res) => {
   }
   // Two-step picker: pieces with at least one unposted platform, and the
   // platform choices per piece (filled into the second select client-side).
+  // Platforms are limited to the piece's account, except combos that already
+  // have a variant — those stay markable.
+  const enabledMap = getEnabledMap();
   const markPieces = [];
   const platformsByPiece = {};
   for (const piece of pieces) {
     const options = platforms
+      .filter((p) => enabledMap[piece.account_id]?.[p.id] || byPiece[piece.id]?.[p.id])
       .filter((p) => byPiece[piece.id]?.[p.id]?.status !== 'posted')
       .map((p) => {
         const v = byPiece[piece.id]?.[p.id];
@@ -94,6 +105,14 @@ calendarRouter.post('/calendar/mark', (req, res) => {
   const { piece_id: pieceId, platform_id: platformId, posted_date, live_url } = req.body;
   if (!pieceId || !platformId || !/^\d{4}-\d{2}-\d{2}$/.test(posted_date || '')) {
     return res.redirect('/calendar?err=' + encodeURIComponent('Pick a content, a platform and a date.'));
+  }
+  // The picker is already account-filtered; this guards stale forms.
+  const piece = db.prepare('SELECT account_id FROM content_pieces WHERE id = ?').get(pieceId);
+  const hasVariant = db
+    .prepare('SELECT 1 FROM platform_variants WHERE content_piece_id = ? AND platform_id = ?')
+    .get(pieceId, platformId);
+  if (!piece || (!getEnabledMap()[piece.account_id]?.[platformId] && !hasVariant)) {
+    return res.redirect('/calendar?err=' + encodeURIComponent('That platform is disabled for this account.'));
   }
   db.prepare(
     `INSERT OR IGNORE INTO platform_variants (content_piece_id, platform_id, hashtags, status)
