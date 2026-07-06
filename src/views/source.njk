@@ -1,0 +1,73 @@
+{% extends "layout.njk" %}
+{% block title %}@{{ profile.username }}{% endblock %}
+{% block content %}
+<h1>@{{ profile.username }} <span class="badge">{{ profile.platform }}</span>
+  <span class="badge badge-account" style="--acct: {{ profile.account_color }}">{{ profile.account_name }}</span>
+</h1>
+
+<div class="row wrap">
+  <a href="{{ profile.url }}" target="_blank" rel="noopener">open profile ↗</a>
+  <form method="post" action="/sources/{{ profile.id }}/refresh" class="inline">
+    <button class="btn-small" onclick="this.textContent='Refreshing…'">↻ Refresh</button>
+  </form>
+  <span class="muted small">last scraped: {{ profile.last_scraped_at or 'never' }}</span>
+</div>
+
+{% if scrape and scrape.state == 'running' %}
+<div class="scrape-status staging-status" data-profile-id="{{ profile.id }}">
+  <span class="staging-running">{{ scrape.message }}</span>
+</div>
+{% elif scrape %}
+<p class="staging-status">
+  <span class="staging-{{ scrape.state }}">{{ scrape.message }}</span>
+  {% if scrape.state == 'error' %} <a href="/settings">Open Settings</a>{% endif %}
+</p>
+{% endif %}
+
+{% if posts.length %}
+<div class="thumb-grid">
+  {% for post in posts %}
+  <div class="thumb-card" id="post-{{ post.id }}">
+    <a href="{{ post.post_url }}" target="_blank" rel="noopener" class="thumb-link">
+      {% if post.thumb_path %}
+      <img src="/thumbs/{{ post.thumb_path }}" loading="lazy" alt="">
+      {% else %}
+      <div class="thumb-ph">📷</div>
+      {% endif %}
+      {% if post.is_video %}<span class="play-badge">▶</span>{% endif %}
+    </a>
+    <div class="thumb-meta stack">
+      {% if post.caption %}<div>{{ post.caption | truncate(80) }}</div>{% endif %}
+      {% if post.posted_at %}<div class="muted">{{ post.posted_at.slice(0, 10) }}</div>{% endif %}
+      <div class="row wrap">
+        {% for p in cnPlatforms %}
+        <form class="inline" method="post" action="/sources/post/{{ post.id }}/mark/{{ p.id }}">
+          <button class="btn-tiny mark-btn{% if marks[post.id] and marks[post.id][p.id] %} mark-on{% endif %}" title="{{ p.display_name }}">{{ p.short }}</button>
+        </form>
+        {% endfor %}
+      </div>
+      <div class="row wrap">
+        {% if post.content_piece_id %}
+        <a href="/piece/{{ post.content_piece_id }}">→ piece</a>
+        {% set st = importStates[post.id] %}
+        {% if st and st.state != 'done' %}
+        <div class="import-status staging-status" data-piece-id="{{ post.content_piece_id }}">
+          <span class="staging-{{ st.state }}">{{ st.message | truncate(60) }}</span>
+        </div>
+        {% endif %}
+        {% elif post.is_video %}
+        <form class="inline" method="post" action="/sources/post/{{ post.id }}/import">
+          <button class="btn-tiny" onclick="this.textContent='Importing…'">⬇ Import</button>
+        </form>
+        {% else %}
+        <span class="muted small">image post</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted">No posts yet{% if scrape and scrape.state == 'running' %} — scraping now, this page reloads when done{% else %} — hit Refresh to scrape the profile{% endif %}.</p>
+{% endif %}
+{% endblock %}

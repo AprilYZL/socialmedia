@@ -70,8 +70,8 @@ if (markPiece && markPlatform) {
 
 // Poll import status while a video download runs in the background;
 // reload once when it finishes so the new media asset row appears.
-const importEl = document.querySelector('.import-status[data-piece-id]');
-if (importEl) {
+// The sources grid can have several posts importing at once.
+document.querySelectorAll('.import-status[data-piece-id]').forEach((importEl) => {
   const importTimer = setInterval(async () => {
     try {
       const res = await fetch(`/piece/${importEl.dataset.pieceId}/import-status`);
@@ -84,6 +84,32 @@ if (importEl) {
       if (data.importing.state === 'done') {
         clearInterval(importTimer);
         location.reload();
+      }
+    } catch {
+      /* server briefly unavailable — keep last message */
+    }
+  }, 2500);
+});
+
+// Poll scrape status while a tracked profile is being scraped;
+// reload once when it finishes so the thumbnail grid appears.
+const scrapeEl = document.querySelector('.scrape-status[data-profile-id]');
+if (scrapeEl) {
+  const scrapeTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/sources/${scrapeEl.dataset.profileId}/scrape-status`);
+      const data = await res.json();
+      if (!data.scrape) return;
+      const span = document.createElement('span');
+      span.className = `staging-${data.scrape.state}`;
+      span.textContent = data.scrape.message;
+      scrapeEl.replaceChildren(span);
+      if (data.scrape.state === 'done') {
+        clearInterval(scrapeTimer);
+        location.reload();
+      }
+      if (data.scrape.state === 'error') {
+        clearInterval(scrapeTimer);
       }
     } catch {
       /* server briefly unavailable — keep last message */

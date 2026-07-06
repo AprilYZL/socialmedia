@@ -9,6 +9,7 @@ export const config = {
   dataDir: path.join(ROOT, 'data'),
   dbPath: path.join(ROOT, 'data', 'app.db'),
   profilesDir: path.join(ROOT, 'data', 'profiles'),
+  thumbnailsDir: path.join(ROOT, 'data', 'thumbnails'),
   assetsDir: path.join(ROOT, 'assets'),
   viewsDir: path.join(ROOT, 'src', 'views'),
   publicDir: path.join(ROOT, 'src', 'public'),

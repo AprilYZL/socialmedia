@@ -89,6 +89,38 @@ CREATE TABLE IF NOT EXISTS platform_templates (
   caption_template TEXT
 );
 
+CREATE TABLE IF NOT EXISTS tracked_profiles (
+  id INTEGER PRIMARY KEY,
+  platform TEXT NOT NULL,           -- 'instagram' | 'tiktok'
+  username TEXT NOT NULL,
+  url TEXT NOT NULL,                -- canonical profile URL
+  account_id TEXT NOT NULL DEFAULT 'frenchtouch' REFERENCES accounts(id),
+  last_scraped_at TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE (platform, username)
+);
+
+CREATE TABLE IF NOT EXISTS profile_posts (
+  id INTEGER PRIMARY KEY,
+  tracked_profile_id INTEGER NOT NULL REFERENCES tracked_profiles(id) ON DELETE CASCADE,
+  external_id TEXT NOT NULL,        -- IG shortcode / TikTok video id
+  post_url TEXT NOT NULL,
+  caption TEXT DEFAULT '',
+  is_video INTEGER NOT NULL DEFAULT 0,
+  posted_at TEXT,                   -- ISO timestamp when scrapeable
+  thumb_path TEXT,                  -- relative to config.thumbnailsDir
+  content_piece_id INTEGER REFERENCES content_pieces(id),
+  first_seen_at TEXT DEFAULT (datetime('now')),
+  UNIQUE (tracked_profile_id, external_id)
+);
+
+CREATE TABLE IF NOT EXISTS profile_post_marks (
+  profile_post_id INTEGER NOT NULL REFERENCES profile_posts(id) ON DELETE CASCADE,
+  platform_id TEXT NOT NULL REFERENCES platforms(id),
+  uploaded_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (profile_post_id, platform_id)
+);
+
 CREATE TABLE IF NOT EXISTS hashtag_groups (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,

@@ -45,6 +45,38 @@ export function normalizeUrl(raw) {
   return `https://${host}${pathname}`;
 }
 
+// Instagram path segments that are pages, not usernames.
+const INSTAGRAM_RESERVED = new Set(['p', 'reel', 'reels', 'tv', 'stories', 'explore', 'accounts', 'direct']);
+
+// Parse a pasted profile URL into { platform, username, url } with a
+// canonical url. Rejects post URLs so the two paste boxes stay unambiguous.
+export function parseProfileUrl(raw) {
+  let u;
+  try {
+    u = new URL(String(raw || '').trim());
+  } catch {
+    throw new Error('That does not look like a valid URL.');
+  }
+  const host = u.hostname.toLowerCase().replace(/^(www|m)\./, '');
+  const segments = u.pathname.split('/').filter(Boolean);
+
+  if (INSTAGRAM_HOSTS.has(host)) {
+    const username = (segments[0] || '').toLowerCase();
+    if (!username || segments.length > 1 || INSTAGRAM_RESERVED.has(username)) {
+      throw new Error('That looks like a post URL — paste a profile URL like instagram.com/username.');
+    }
+    return { platform: 'instagram', username, url: `https://www.instagram.com/${username}/` };
+  }
+  if (TIKTOK_HOSTS.has(host)) {
+    if (segments.length !== 1 || !segments[0].startsWith('@') || segments[0].length < 2) {
+      throw new Error('That looks like a post URL — paste a profile URL like tiktok.com/@username.');
+    }
+    const username = segments[0].slice(1);
+    return { platform: 'tiktok', username, url: `https://www.tiktok.com/@${username}` };
+  }
+  throw new Error('Only TikTok and Instagram profile URLs are supported.');
+}
+
 function firstErrorLine(err) {
   const line = String(err.stderr || '')
     .split('\n')

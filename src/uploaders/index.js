@@ -18,7 +18,7 @@ export const stagingStatus = new Map();
 
 let lastStageAt = 0;
 
-const LOGIN_URL_HINTS = /login|passport|sso|accounts\.google|signin/i;
+export const LOGIN_URL_HINTS = /login|passport|sso|accounts\.google|signin/i;
 
 export function getStagingStatus(variantId) {
   return stagingStatus.get(Number(variantId)) || null;

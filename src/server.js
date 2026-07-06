@@ -7,6 +7,7 @@ import './db/index.js';
 import { accountRouter } from './routes/account.js';
 import { trackerRouter } from './routes/tracker.js';
 import { contentRouter } from './routes/content.js';
+import { sourcesRouter } from './routes/sources.js';
 import { variantsRouter } from './routes/variants.js';
 import { calendarRouter } from './routes/calendar.js';
 import { uploadRouter } from './routes/upload.js';
@@ -20,11 +21,13 @@ app.set('view engine', 'njk');
 // 2mb: pasted article bodies blow past the 100kb default (URL-encoded CJK is ~9 bytes/char)
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use('/static', express.static(config.publicDir));
+app.use('/thumbs', express.static(config.thumbnailsDir));
 
 // Account middleware feeds the nav switcher on every page — keep it first.
 app.use(accountRouter);
 app.use(trackerRouter);
 app.use(contentRouter);
+app.use(sourcesRouter);
 app.use(variantsRouter);
 app.use(calendarRouter);
 app.use(uploadRouter);

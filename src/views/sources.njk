@@ -1,0 +1,46 @@
+{% extends "layout.njk" %}
+{% block title %}Sources{% endblock %}
+{% block content %}
+<h1>Sources</h1>
+
+<section class="card">
+  <h2>Track an Instagram / TikTok profile</h2>
+  <form method="post" action="/sources" class="row">
+    <input name="url" class="grow" required placeholder="https://www.instagram.com/username or https://www.tiktok.com/@username">
+    <select name="account_id">
+      {% for a in accounts %}
+      <option value="{{ a.id }}" {% if a.id == activeAccount %}selected{% endif %}>{{ a.display_name }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn-primary" onclick="this.textContent='Adding…'">Track</button>
+  </form>
+  <p class="muted small">The account's logged-in browser profile is used to scrape the post grid, so pick the account that is logged in on that platform.</p>
+</section>
+
+{% if profiles.length %}
+<div class="table-scroll">
+<table>
+  <thead><tr><th>Profile</th><th>Platform</th><th>Account</th><th>Posts</th><th>Last scraped</th><th></th></tr></thead>
+  <tbody>
+    {% for p in profiles %}
+    {% set acct = accountsById[p.account_id] %}
+    <tr>
+      <td><a href="/sources/{{ p.id }}">@{{ p.username }}</a></td>
+      <td class="muted">{{ p.platform }}</td>
+      <td>{% if acct %}<span class="badge badge-account" style="--acct: {{ acct.color }}">{{ acct.display_name }}</span>{% endif %}</td>
+      <td>{{ p.post_count }}</td>
+      <td class="muted">{{ p.last_scraped_at or 'never' }}</td>
+      <td>
+        <form method="post" action="/sources/{{ p.id }}/delete" onsubmit="return confirm('Stop tracking @{{ p.username }}? Marks and thumbnails are deleted; imported pieces stay in the Library.')">
+          <button class="btn-small">remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">No tracked profiles yet — paste a profile URL above.</p>
+{% endif %}
+{% endblock %}
