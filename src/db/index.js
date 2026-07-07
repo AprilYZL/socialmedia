@@ -31,6 +31,11 @@ if (pieceCols.length && !pieceCols.includes('original_text')) {
   db.exec('ALTER TABLE content_pieces ADD COLUMN original_text TEXT');
 }
 
+const postCols = db.prepare('PRAGMA table_info(profile_posts)').all().map((c) => c.name);
+if (postCols.length && !postCols.includes('missing_since')) {
+  db.exec('ALTER TABLE profile_posts ADD COLUMN missing_since TEXT');
+}
+
 const schema = fs.readFileSync(path.join(config.root, 'src', 'db', 'schema.sql'), 'utf8');
 db.exec(schema);
 seed(db);

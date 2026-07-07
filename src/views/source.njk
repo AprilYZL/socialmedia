@@ -27,7 +27,7 @@
 {% if posts.length %}
 <div class="thumb-grid">
   {% for post in posts %}
-  <div class="thumb-card" id="post-{{ post.id }}">
+  <div class="thumb-card{% if post.missing_since %} gone{% endif %}" id="post-{{ post.id }}">
     <a href="{{ post.post_url }}" target="_blank" rel="noopener" class="thumb-link">
       {% if post.thumb_path %}
       <img src="/thumbs/{{ post.thumb_path }}" loading="lazy" alt="">
@@ -35,12 +35,13 @@
       <div class="thumb-ph">📷</div>
       {% endif %}
       {% if post.is_video %}<span class="play-badge">▶</span>{% endif %}
+      {% if post.missing_since %}<span class="gone-badge" title="Not found on the profile since {{ post.missing_since.slice(0, 10) }}">🗑 removed by source</span>{% endif %}
     </a>
     <div class="thumb-meta stack">
       {% if post.caption %}<div>{{ post.caption | truncate(80) }}</div>{% endif %}
       {% if post.posted_at %}<div class="muted">{{ post.posted_at.slice(0, 10) }}</div>{% endif %}
       <div class="row wrap">
-        {% for p in cnPlatforms %}
+        {% for p in markPlatforms %}
         <form class="inline" method="post" action="/sources/post/{{ post.id }}/mark/{{ p.id }}">
           <button class="btn-tiny mark-btn{% if marks[post.id] and marks[post.id][p.id] %} mark-on{% endif %}" title="{{ p.display_name }}">{{ p.short }}</button>
         </form>
@@ -55,12 +56,10 @@
           <span class="staging-{{ st.state }}">{{ st.message | truncate(60) }}</span>
         </div>
         {% endif %}
-        {% elif post.is_video %}
+        {% else %}
         <form class="inline" method="post" action="/sources/post/{{ post.id }}/import">
           <button class="btn-tiny" onclick="this.textContent='Importing…'">⬇ Import</button>
         </form>
-        {% else %}
-        <span class="muted small">image post</span>
         {% endif %}
       </div>
     </div>

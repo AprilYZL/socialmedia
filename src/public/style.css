@@ -188,3 +188,5 @@ th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
 .play-badge { position: absolute; top: 0.4rem; right: 0.4rem; background: rgba(0, 0, 0, 0.65); color: #fff; border-radius: 99px; padding: 0.05rem 0.45rem; font-size: 0.8rem; }
 .thumb-meta { padding: 0.4rem 0.6rem 0.6rem; font-size: 0.8rem; gap: 0.35rem; }
 .mark-btn.mark-on { border-color: var(--ok); color: var(--ok); background: rgba(63, 178, 127, 0.12); }
+.gone-badge { position: absolute; bottom: 0.4rem; left: 0.4rem; background: rgba(224, 82, 82, 0.85); color: #fff; border-radius: 4px; padding: 0.05rem 0.4rem; font-size: 0.72rem; }
+.thumb-card.gone img { opacity: 0.55; }

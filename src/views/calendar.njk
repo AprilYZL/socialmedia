@@ -43,12 +43,21 @@
         {% set acct = accountsById[post.account_id] %}
         <div class="cal-slot">
           {% if acct %}<span class="acct-dot" style="--acct: {{ acct.color }}" title="{{ acct.display_name }}"></span>{% endif %}
+          {% if post.source_mark %}
+          <a href="/sources/{{ post.tracked_profile_id }}#post-{{ post.post_id }}" title="marked as uploaded on the source page">{{ (post.caption or ('@' + post.username)) | truncate(18) }}</a>
+          <span class="muted small">{{ post.platform_name }}</span>
+          {% if post.post_url %}<a href="{{ post.post_url }}" target="_blank" rel="noopener" title="open original post">🔗</a>{% endif %}
+          <form class="inline" method="post" action="/sources/post/{{ post.post_id }}/mark/{{ post.platform_id }}" onsubmit="return confirm('Un-mark this upload? This clears the toggle on the source page too.')">
+            <button class="btn-tiny" title="un-mark uploaded">✕</button>
+          </form>
+          {% else %}
           <a href="/piece/{{ post.piece_id }}">{{ post.piece_title | truncate(18) }}</a>
           <span class="muted small">{{ post.platform_name }}</span>
           {% if post.live_url %}<a href="{{ post.live_url }}" target="_blank" rel="noopener" title="open live post">🔗</a>{% endif %}
           <form class="inline" method="post" action="/calendar/unmark/{{ post.variant_id }}" onsubmit="return confirm('Un-mark this post? The variant goes back to “ready”.')">
             <button class="btn-tiny" title="un-mark posted">✕</button>
           </form>
+          {% endif %}
         </div>
         {% endfor %}
         {% endif %}

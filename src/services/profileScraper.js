@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db } from '../db/index.js';
 import { config } from '../config.js';
+import { probe } from './media.js';
+import { importStatus, downloadFolder } from './importer.js';
 import { launchProfile } from '../uploaders/baseUploader.js';
 import { LOGIN_URL_HINTS } from '../uploaders/index.js';
 
@@ -127,6 +129,8 @@ async function runScrape(id, profile) {
          posted_at  = COALESCE(excluded.posted_at, profile_posts.posted_at),
          thumb_path = COALESCE(excluded.thumb_path, profile_posts.thumb_path)`
     );
+    const seenIds = items.map((i) => i.externalId);
+    const seenPlaceholders = seenIds.map(() => '?').join(',');
     db.transaction(() => {
       for (const item of items) {
         upsert.run({
@@ -138,6 +142,22 @@ async function runScrape(id, profile) {
           postedAt: item.postedAt || null,
           thumbPath: item.thumbPath || null,
         });
+      }
+      // Deleted-by-source detection. A scrape only reaches as deep as it
+      // scrolled, so absence alone proves nothing for old posts — but a
+      // stored post NEWER than the oldest post this scrape saw should have
+      // been in it. If it wasn't, the source deleted (or archived) it.
+      db.prepare(
+        `UPDATE profile_posts SET missing_since = NULL
+         WHERE tracked_profile_id = ? AND external_id IN (${seenPlaceholders})`
+      ).run(id, ...seenIds);
+      const scrapedDates = items.map((i) => i.postedAt).filter(Boolean).sort();
+      if (scrapedDates.length) {
+        db.prepare(
+          `UPDATE profile_posts SET missing_since = COALESCE(missing_since, datetime('now'))
+           WHERE tracked_profile_id = ? AND posted_at IS NOT NULL AND posted_at >= ?
+             AND external_id NOT IN (${seenPlaceholders})`
+        ).run(id, scrapedDates[0], ...seenIds);
       }
       db.prepare("UPDATE tracked_profiles SET last_scraped_at = datetime('now') WHERE id = ?").run(id);
     })();
@@ -284,6 +304,155 @@ async function collectDomItems(page, profile, collected) {
       );
     }
   }
+}
+
+// --- Image-post import ---------------------------------------------------
+// yt-dlp only handles videos, so image posts (incl. carousels) are imported
+// by opening the post page in the logged-in browser, digging the full-res
+// image URLs out of the page's JSON payloads, and downloading them directly.
+// Writes into the importer's importStatus map so the existing per-piece
+// polling (/piece/:id/import-status) covers image imports unchanged.
+
+export function startImageImport(pieceId, post, profile) {
+  const id = Number(pieceId);
+  importStatus.set(id, { state: 'running', message: 'Fetching image(s) from the post page…' });
+  runImageImport(id, post, profile).catch((err) => {
+    importStatus.set(id, {
+      state: 'error',
+      message: `Image download failed (${String(err.message || err).slice(0, 300)}). You can add the file manually with the form below.`,
+    });
+  });
+}
+
+async function runImageImport(pieceId, post, profile) {
+  const ctx = await launchProfile(profile.platform, profile.account_id);
+  const page = await ctx.newPage();
+  try {
+    // Post data arrives either via API responses (client-side navigation)
+    // or embedded <script type="application/json"> blobs (direct load) —
+    // collect both and search them the same way.
+    const jsons = [];
+    page.on('response', async (resp) => {
+      if (!/graphql|\/api\//.test(resp.url())) return;
+      try {
+        jsons.push(await resp.json());
+      } catch {
+        // non-JSON response
+      }
+    });
+    await page.goto(post.post_url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(3000);
+    if (LOGIN_URL_HINTS.test(page.url())) {
+      throw new Error(`not logged in on ${profile.platform} — log in via Settings and retry`);
+    }
+    const scripts = await page
+      .$$eval('script[type="application/json"]', (els) => els.map((e) => e.textContent))
+      .catch(() => []);
+    for (const s of scripts) {
+      try {
+        jsons.push(JSON.parse(s));
+      } catch {
+        // not JSON after all
+      }
+    }
+
+    let urls = [];
+    if (profile.platform === 'instagram') {
+      const node = findNode(
+        jsons,
+        (v) =>
+          (v.shortcode || v.code) === post.external_id &&
+          (v.image_versions2 || v.display_url || v.carousel_media || v.edge_sidecar_to_children)
+      );
+      if (node) urls = instagramImageUrls(node);
+    } else {
+      const node = findNode(jsons, (v) => String(v.id) === post.external_id && v.imagePost);
+      if (node) urls = (node.imagePost.images || []).map((im) => im.imageURL?.urlList?.[0]).filter(Boolean);
+    }
+    if (!urls.length) throw new Error('could not find image data on the post page');
+
+    const title = db.prepare('SELECT title FROM content_pieces WHERE id = ?').get(pieceId)?.title || 'post';
+    const safeTitle = title.replace(/[%/\\:*?"<>|]/g, '_').slice(0, 60);
+    const folder = downloadFolder({
+      platform: profile.platform,
+      username: profile.username,
+      kind: 'image',
+      title,
+      date: (post.posted_at || '').slice(0, 10) || null,
+    });
+    fs.mkdirSync(folder, { recursive: true });
+    const insertAsset = db.prepare(
+      `INSERT INTO media_assets (content_piece_id, file_path, kind, width, height, duration_sec, size_bytes, role)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    const saved = [];
+    for (const [i, url] of urls.entries()) {
+      importStatus.set(pieceId, { state: 'running', message: `Downloading image ${i + 1}/${urls.length}…` });
+      const resp = await ctx.request.get(url, { headers: { Referer: post.post_url }, timeout: 20000 });
+      if (!resp.ok()) throw new Error(`image ${i + 1} download got HTTP ${resp.status()}`);
+      const ext = { 'image/png': 'png', 'image/webp': 'webp' }[resp.headers()['content-type']] || 'jpg';
+      const suffix = urls.length > 1 ? `-${i + 1}` : '';
+      const filePath = path.join(folder, `${safeTitle} [${post.external_id}]${suffix}.${ext}`);
+      fs.writeFileSync(filePath, await resp.body());
+      const meta = await probe(filePath);
+      insertAsset.run(
+        pieceId,
+        filePath,
+        'image',
+        meta.width,
+        meta.height,
+        meta.duration_sec,
+        meta.size_bytes,
+        i === 0 ? 'primary' : 'extra_image'
+      );
+      saved.push(filePath);
+    }
+    importStatus.set(pieceId, {
+      state: 'done',
+      message: `${saved.length} image${saved.length > 1 ? 's' : ''} saved to ~/Downloads and attached.`,
+      filePath: saved[0],
+    });
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
+// Depth-first search through collected JSON payloads for the first node
+// matching the predicate.
+function findNode(value, pred) {
+  if (!value || typeof value !== 'object') return null;
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const hit = findNode(v, pred);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (pred(value)) return value;
+  for (const v of Object.values(value)) {
+    const hit = findNode(v, pred);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// Full-res image URLs of a post node, covering both current (carousel_media /
+// image_versions2) and legacy (edge_sidecar_to_children / display_url) shapes.
+// Video slides inside a mixed carousel are skipped.
+function instagramImageUrls(node) {
+  const children = node.carousel_media || node.edge_sidecar_to_children?.edges?.map((e) => e.node) || [node];
+  const urls = [];
+  for (const child of children) {
+    if (child.media_type === 2 || child.is_video) continue;
+    const url = largestCandidate(child.image_versions2?.candidates) || child.display_url || child.thumbnail_src;
+    if (url) urls.push(url);
+  }
+  return urls;
+}
+
+function largestCandidate(candidates) {
+  if (!Array.isArray(candidates) || !candidates.length) return null;
+  return [...candidates].sort((a, b) => (b.width || 0) - (a.width || 0))[0]?.url || null;
 }
 
 // Save a low-res thumbnail to data/thumbnails/<profileId>/<externalId>.jpg.

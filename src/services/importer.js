@@ -125,7 +125,37 @@ export async function fetchMetadata(url, accountId = 'frenchtouch') {
   } catch {
     canonicalUrl = url;
   }
-  return { title, description, canonicalUrl, usedCookies };
+  return { title, description, canonicalUrl, usedCookies, uploader: pickHandle(info), uploadDate: pickDate(info) };
+}
+
+// The @handle, wherever this platform's extractor put it. Numeric ids
+// (TikTok's uploader_id) lose to actual handles.
+function pickHandle(info) {
+  const candidates = [info.uploader_id, info.channel, info.uploader].filter(Boolean).map(String);
+  return candidates.find((c) => !/^\d+$/.test(c)) || candidates[0] || null;
+}
+
+function pickDate(info) {
+  if (/^\d{8}$/.test(info.upload_date || '')) {
+    return `${info.upload_date.slice(0, 4)}-${info.upload_date.slice(4, 6)}-${info.upload_date.slice(6, 8)}`;
+  }
+  if (info.timestamp) return new Date(info.timestamp * 1000).toISOString().slice(0, 10);
+  return null;
+}
+
+// One folder per imported post under ~/Downloads:
+// "<platform> - <handle> - <video|image> - <title> - <YYYY-MM-DD>".
+// '%' is stripped along with filesystem-hostile chars because the folder
+// ends up inside a yt-dlp -o template, where '%' sequences are expanded.
+function cleanPart(s) {
+  return String(s || '').replace(/[%/\\:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
+}
+
+export function downloadFolder({ platform, username, kind, title, date }) {
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const parts = [platform, username, kind, cleanPart(title).slice(0, 60), date || today];
+  return path.join(os.homedir(), 'Downloads', parts.map(cleanPart).filter(Boolean).join(' - '));
 }
 
 // Write the Playwright profile's Instagram cookies as a Netscape cookies.txt
@@ -176,12 +206,20 @@ export function unmarkImporting(url) {
   inFlightUrls.delete(url);
 }
 
-// Download the video to ~/Downloads in the background and attach it to the
-// piece as a media asset. Fire-and-forget; the UI polls importStatus.
-export function startDownload(pieceId, url, { usedCookies = false } = {}) {
+// Download the video to a per-post folder in ~/Downloads in the background
+// and attach it to the piece as a media asset. Fire-and-forget; the UI polls
+// importStatus.
+export function startDownload(pieceId, url, { usedCookies = false, title = '', uploader = null, uploadDate = null } = {}) {
   const id = Number(pieceId);
+  const folder = downloadFolder({
+    platform: url.includes('tiktok') ? 'tiktok' : 'instagram',
+    username: uploader,
+    kind: 'video',
+    title,
+    date: uploadDate,
+  });
   importStatus.set(id, { state: 'running', message: 'Downloading video to ~/Downloads…' });
-  runDownload(id, url, usedCookies).catch((err) => {
+  runDownload(id, url, usedCookies, folder).catch((err) => {
     importStatus.set(id, {
       state: 'error',
       message: `Download failed (${firstErrorLine(err)}). You can add the file manually with the form below.`,
@@ -189,8 +227,8 @@ export function startDownload(pieceId, url, { usedCookies = false } = {}) {
   });
 }
 
-async function runDownload(id, url, usedCookies) {
-  const outTemplate = path.join(os.homedir(), 'Downloads', '%(title).60B [%(id)s].%(ext)s');
+async function runDownload(id, url, usedCookies, folder) {
+  const outTemplate = path.join(folder, '%(title).60B [%(id)s].%(ext)s');
   const args = [
     '--no-playlist',
     '-f', 'b[ext=mp4]/b', // best pre-merged single file: no ffmpeg merge needed

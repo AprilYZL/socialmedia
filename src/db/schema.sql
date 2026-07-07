@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS profile_posts (
   is_video INTEGER NOT NULL DEFAULT 0,
   posted_at TEXT,                   -- ISO timestamp when scrapeable
   thumb_path TEXT,                  -- relative to config.thumbnailsDir
+  missing_since TEXT,               -- set when the source deleted the post; NULL while it's live
   content_piece_id INTEGER REFERENCES content_pieces(id),
   first_seen_at TEXT DEFAULT (datetime('now')),
   UNIQUE (tracked_profile_id, external_id)

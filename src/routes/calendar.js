@@ -19,9 +19,11 @@ function monthGrid(year, month /* 1-12 */) {
   return weeks;
 }
 
-// Posted-history view: what got published where and when. Driven entirely by
+// Posted-history view: what got published where and when. Driven by
 // platform_variants (status='posted', posted_at) — marking a variant posted on
-// the piece page shows up here too, and vice versa.
+// the piece page shows up here too, and vice versa — plus the per-platform
+// "uploaded" marks from the Sources pages, so reposts that never became a
+// Library piece still land on the calendar.
 calendarRouter.get('/calendar', (req, res) => {
   const now = new Date();
   const [year, month] = (req.query.month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
@@ -46,8 +48,31 @@ calendarRouter.get('/calendar', (req, res) => {
     )
     .all({ month: `${monthPrefix}-%`, ...filterParams });
 
+  // Source-page marks. Skipped when the post's linked piece already has a
+  // posted variant on that platform — that combo is in the query above.
+  const markAccountFilter = active === 'all' ? '' : 'AND tp.account_id = @account';
+  const sourceMarks = db
+    .prepare(
+      `SELECT m.platform_id, substr(m.uploaded_at, 1, 10) AS posted_date,
+              pp.id AS post_id, pp.post_url, pp.caption, pp.tracked_profile_id,
+              tp.username, tp.account_id, p.display_name AS platform_name
+       FROM profile_post_marks m
+       JOIN profile_posts pp ON pp.id = m.profile_post_id
+       JOIN tracked_profiles tp ON tp.id = pp.tracked_profile_id
+       JOIN platforms p ON p.id = m.platform_id
+       WHERE m.uploaded_at LIKE @month ${markAccountFilter}
+         AND NOT EXISTS (
+           SELECT 1 FROM platform_variants v
+           WHERE v.content_piece_id = pp.content_piece_id
+             AND v.platform_id = m.platform_id AND v.status = 'posted'
+         )
+       ORDER BY m.uploaded_at`
+    )
+    .all({ month: `${monthPrefix}-%`, ...filterParams });
+
   const postsByDate = {};
   for (const p of posts) (postsByDate[p.posted_date] ??= []).push(p);
+  for (const m of sourceMarks) (postsByDate[m.posted_date] ??= []).push({ ...m, source_mark: true });
 
   // Every not-yet-posted piece × platform combo is markable — a draft variant
   // doesn't need to exist yet.
